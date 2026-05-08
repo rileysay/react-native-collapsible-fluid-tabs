@@ -1,4 +1,9 @@
-import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
+import {
+  Children,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { TabSymbol, type TabConfig, type TabProps } from '../types';
 
 export interface ExtractedTab {

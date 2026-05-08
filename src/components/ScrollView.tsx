@@ -44,10 +44,7 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
 
     const minHeight = props.minContentHeight ?? ctx.minPageContentHeight;
 
-    const contentContainerStyle = [
-      { minHeight },
-      props.contentContainerStyle,
-    ];
+    const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
 
     const AnimatedScrollView =
       Animated.ScrollView as unknown as React.ComponentType<any>;

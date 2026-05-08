@@ -102,11 +102,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
 
   return (
     <Animated.View
-      style={[
-        styles.wrap,
-        { top: topOffset, height: tabBarHeight },
-        wrapStyle,
-      ]}
+      style={[styles.wrap, { top: topOffset, height: tabBarHeight }, wrapStyle]}
     >
       <View
         style={[

@@ -1,10 +1,4 @@
-import {
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-} from 'react-native';
+import { StatusBar, StyleSheet, Text, View, Pressable } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Tabs } from 'react-native-collapsible-fluid-tabs';
@@ -31,9 +25,7 @@ function Header() {
       <View style={styles.avatar} />
       <View style={{ marginTop: 12 }}>
         <Text style={styles.name}>Jane Doe</Text>
-        <Text style={styles.bio}>
-          Building things people don't forget.
-        </Text>
+        <Text style={styles.bio}>Building things people don't forget.</Text>
       </View>
     </View>
   );
@@ -107,9 +99,9 @@ export default function App() {
             <Tabs.ScrollView contentContainerStyle={{ padding: 16 }}>
               <Text style={styles.cardTitle}>About</Text>
               <Text style={styles.cardBody}>
-                This tab uses Tabs.ScrollView instead of Tabs.FlatList. It
-                still participates in the same scroll synchronization and
-                shares the same collapsing header behavior.
+                This tab uses Tabs.ScrollView instead of Tabs.FlatList. It still
+                participates in the same scroll synchronization and shares the
+                same collapsing header behavior.
               </Text>
             </Tabs.ScrollView>
           </Tabs.Tab>

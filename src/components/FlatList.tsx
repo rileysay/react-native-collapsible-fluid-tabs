@@ -72,12 +72,10 @@ function TabsFlatListInner<T>(
 
   const minHeight = props.minContentHeight ?? ctx.minPageContentHeight;
 
-  const contentContainerStyle = [
-    { minHeight },
-    props.contentContainerStyle,
-  ];
+  const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
 
-  const AnimatedFlatList = Animated.FlatList as unknown as React.ComponentType<any>;
+  const AnimatedFlatList =
+    Animated.FlatList as unknown as React.ComponentType<any>;
 
   return (
     <AnimatedFlatList
@@ -87,9 +85,7 @@ function TabsFlatListInner<T>(
       scrollEventThrottle={1}
       directionalLockEnabled
       nestedScrollEnabled
-      showsVerticalScrollIndicator={
-        props.showsVerticalScrollIndicator ?? false
-      }
+      showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
       animatedProps={ctx.scrollEnabledProps}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}

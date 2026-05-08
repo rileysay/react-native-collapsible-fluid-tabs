@@ -242,9 +242,11 @@ export function Container(props: ContainerProps) {
     onTabPress: handleTabPress,
   };
 
-  const tabBarNode = renderTabBar
-    ? renderTabBar(tabBarProps)
-    : <DefaultTabBar {...tabBarProps} />;
+  const tabBarNode = renderTabBar ? (
+    renderTabBar(tabBarProps)
+  ) : (
+    <DefaultTabBar {...tabBarProps} />
+  );
 
   return (
     <TabsContext.Provider value={contextValue}>
@@ -273,7 +275,10 @@ export function Container(props: ContainerProps) {
           </View>
         ) : null}
 
-        <View style={[styles.tabBarSlot, { top: pinnedTotal }]} pointerEvents="box-none">
+        <View
+          style={[styles.tabBarSlot, { top: pinnedTotal }]}
+          pointerEvents="box-none"
+        >
           {tabBarNode}
         </View>
 
