@@ -32,14 +32,16 @@ function TabsFlatListInner<T>(
     [ref]
   );
 
-  const { headerHeight, pinnedHeaderHeight, topInset, tabBarHeight, bottomInset } = ctx;
-
   const headerSpacerStyle = useAnimatedStyle(() => ({
-    height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
+    height:
+      ctx.headerHeight.value +
+      ctx.pinnedHeaderHeight +
+      ctx.topInset +
+      ctx.tabBarHeight,
   }));
 
   const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: tabBarHeight + bottomInset + 16,
+    height: ctx.tabBarHeight + ctx.bottomInset + 16,
   }));
 
   const userListHeader = props.ListHeaderComponent;
