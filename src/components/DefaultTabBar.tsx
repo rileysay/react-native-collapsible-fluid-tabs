@@ -1,8 +1,16 @@
-import React, { type ReactNode } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState, type ReactNode } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
+  runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   type DerivedValue,
   type SharedValue,
@@ -10,13 +18,9 @@ import Animated, {
 
 import type { TabBarRenderProps, TabConfig } from '../types';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
 export interface DefaultTabBarColors {
-  /** Background of the tab bar when floating (above the collapsing header). */
-  floatingBackground?: string;
-  /** Background of the tab bar when pinned to the top of the viewport. */
-  pinnedBackground?: string;
+  /** Background of the tab bar. */
+  background?: string;
   /** Track color behind the pill. */
   trackBackground?: string;
   /** Color of the moving pill behind the active tab. */
@@ -29,15 +33,12 @@ export interface DefaultTabBarColors {
 
 export interface DefaultTabBarProps extends TabBarRenderProps {
   colors?: DefaultTabBarColors;
-  /** Horizontal margin when the bar is floating. Default 8. */
-  floatingMargin?: number;
-  /** Side padding inside the floating bar's pill container. Default 16. */
+  /** Side padding inside the pill container. Default 16. */
   sidePadding?: number;
 }
 
 const DEFAULT_COLORS: Required<DefaultTabBarColors> = {
-  floatingBackground: '#ffffff',
-  pinnedBackground: '#ffffff',
+  background: '#ffffff',
   trackBackground: 'rgba(120, 120, 128, 0.16)',
   pillBackground: '#ffffff',
   iconTint: '#1c1c1e',
@@ -49,25 +50,42 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     tabs,
     scrollY,
     headerHeight,
+    activeIndex,
     pagerOffset,
     pillWidth,
     tabBarHeight,
     topInset,
     pinnedHeaderHeight,
+    pullDownBehavior,
     onTabPress,
     colors,
-    floatingMargin = 8,
     sidePadding = 16,
   } = props;
 
+  const { width: screenWidth } = useWindowDimensions();
   const c = { ...DEFAULT_COLORS, ...(colors ?? {}) };
   const topOffset = pinnedHeaderHeight + topInset;
+  const stretch = pullDownBehavior === 'stretch';
+
+  // Mirror the active page into JS state so each tab can report its
+  // accessibilityState. Only fires on whole-page changes, not per frame.
+  const [selectedIndex, setSelectedIndex] = useState(() =>
+    Math.round(activeIndex.value)
+  );
+  useAnimatedReaction(
+    () => Math.round(activeIndex.value),
+    (curr, prev) => {
+      if (curr !== prev) runOnJS(setSelectedIndex)(curr);
+    }
+  );
 
   const wrapStyle = useAnimatedStyle(() => {
     'worklet';
     const translateY =
       scrollY.value < 0
-        ? headerHeight.value + Math.abs(scrollY.value)
+        ? stretch
+          ? headerHeight.value + Math.abs(scrollY.value)
+          : headerHeight.value
         : interpolate(
             scrollY.value,
             [0, headerHeight.value],
@@ -75,15 +93,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
             Extrapolation.CLAMP
           );
 
-    const isPinned = translateY === 0;
-
-    return {
-      transform: [{ translateY }],
-      marginHorizontal: isPinned ? 0 : floatingMargin,
-      borderBottomLeftRadius: isPinned ? 0 : 28,
-      borderBottomRightRadius: isPinned ? 0 : 28,
-      backgroundColor: isPinned ? c.pinnedBackground : c.floatingBackground,
-    };
+    return { transform: [{ translateY }] };
   });
 
   const pillStyle = useAnimatedStyle(() => {
@@ -102,13 +112,22 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
 
   return (
     <Animated.View
-      style={[styles.wrap, { top: topOffset, height: tabBarHeight }, wrapStyle]}
+      style={[
+        styles.wrap,
+        {
+          top: topOffset,
+          height: tabBarHeight,
+          backgroundColor: c.background,
+        },
+        wrapStyle,
+      ]}
     >
       <View
+        accessibilityRole="tablist"
         style={[
           styles.pillContainer,
           {
-            width: SCREEN_WIDTH - sidePadding * 2,
+            width: screenWidth - sidePadding * 2,
             backgroundColor: c.trackBackground,
           },
         ]}
@@ -126,6 +145,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
             pagerOffset={pagerOffset}
             iconTint={c.iconTint}
             labelColor={c.labelColor}
+            selected={index === selectedIndex}
             onPress={() => onTabPress(index)}
           />
         ))}
@@ -140,6 +160,7 @@ interface TabButtonProps {
   pagerOffset: DerivedValue<number> | SharedValue<number>;
   iconTint: string;
   labelColor: string;
+  selected: boolean;
   onPress: () => void;
 }
 
@@ -149,6 +170,7 @@ function TabButton({
   pagerOffset,
   iconTint,
   labelColor,
+  selected,
   onPress,
 }: TabButtonProps) {
   const animStyle = useAnimatedStyle(() => {
@@ -161,7 +183,13 @@ function TabButton({
   });
 
   return (
-    <Pressable style={styles.tabButton} onPress={onPress}>
+    <Pressable
+      style={styles.tabButton}
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      accessibilityLabel={tab.label ?? tab.name}
+    >
       <Animated.View style={[styles.tabButtonInner, animStyle]}>
         {renderIcon(tab.icon, iconTint)}
         {tab.label ? (
@@ -193,7 +221,6 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 8,
   },
   pillContainer: {
     flexDirection: 'row',
