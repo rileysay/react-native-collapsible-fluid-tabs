@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AnimatedLegendList } from '@legendapp/list/reanimated';
-import type { LegendListProps } from '@legendapp/list';
+import type { LegendListProps } from '@legendapp/list/react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
@@ -75,7 +75,7 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
       directionalLockEnabled
       nestedScrollEnabled
       showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
-      animatedProps={ctx.scrollEnabledProps}
+      scrollEnabled={ctx.scrollEnabled}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}
       contentContainerStyle={contentContainerStyle}

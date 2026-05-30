@@ -60,7 +60,7 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
         showsVerticalScrollIndicator={
           props.showsVerticalScrollIndicator ?? false
         }
-        animatedProps={ctx.scrollEnabledProps}
+        scrollEnabled={ctx.scrollEnabled}
         contentContainerStyle={contentContainerStyle}
       >
         <Animated.View style={headerSpacerStyle} />

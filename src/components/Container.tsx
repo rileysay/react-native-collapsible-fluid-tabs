@@ -1,38 +1,58 @@
-import { useCallback, useMemo } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+  type Ref,
+} from 'react';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  GestureDetector,
+  useNativeGesture,
+  usePanGesture,
+  useSimultaneousGestures,
+} from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   cancelAnimation,
   scrollTo,
-  useAnimatedProps,
   useAnimatedRef,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useDerivedValue,
+  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
   type AnimatedRef,
   type SharedValue,
 } from 'react-native-reanimated';
+import { runOnUISync, scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TabIndexContext, TabsContext } from '../context';
-import { extractTabs } from '../utils/children';
+import { extractTabs, type ExtractedTab } from '../utils/children';
+import {
+  collapseTranslateY,
+  resolveSnapIndex,
+  rubberBand,
+} from '../utils/paging';
 import type {
   ContainerProps,
   InternalTabsContextValue,
   TabBarRenderProps,
+  TabsRef,
 } from '../types';
 import { DefaultTabBar } from './DefaultTabBar';
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const DEFAULT_TAB_BAR_HEIGHT = 56;
 const DEFAULT_SWIPE_ACTIVATION = 15;
 const DEFAULT_SWIPE_FAIL = 10;
+// Width of the left-edge zone where the tab pan gesture refuses to activate,
+// leaving room for iOS edge-swipe-back / Android gesture-nav.
+const EDGE_SWIPE_MARGIN = 20;
 const DEFAULT_SPRING: Required<NonNullable<ContainerProps['springConfig']>> = {
   damping: 30,
   stiffness: 200,
@@ -40,9 +60,35 @@ const DEFAULT_SPRING: Required<NonNullable<ContainerProps['springConfig']>> = {
   overshootClamping: true,
 };
 
-export function Container(props: ContainerProps) {
+export const Container = forwardRef<TabsRef, ContainerProps>(
+  function Container(props, ref) {
+    const tabs = useMemo(() => extractTabs(props.children), [props.children]);
+    // Per-tab state below is built with hook loops keyed on tab count. Remount
+    // the implementation whenever the count changes so React never sees a
+    // different number of hooks across renders (which would crash). Swapping
+    // tabs without changing the count keeps state and does not remount.
+    return (
+      <ContainerImpl
+        key={tabs.length}
+        {...props}
+        tabs={tabs}
+        containerRef={ref}
+      />
+    );
+  }
+);
+
+interface ContainerImplProps extends ContainerProps {
+  tabs: ExtractedTab[];
+  containerRef: Ref<TabsRef>;
+}
+
+function ContainerImpl(props: ContainerImplProps) {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
   const {
-    children,
+    tabs,
+    containerRef,
     renderHeader,
     renderPinnedHeader,
     pinnedHeaderHeight = 0,
@@ -55,10 +101,12 @@ export function Container(props: ContainerProps) {
     swipeActivationDistance = DEFAULT_SWIPE_ACTIVATION,
     swipeFailDistance = DEFAULT_SWIPE_FAIL,
     springConfig,
-    minPageContentHeight = SCREEN_HEIGHT * 1.3,
+    minPageContentHeight,
+    pullDownBehavior = 'static',
   } = props;
 
-  const tabs = useMemo(() => extractTabs(children), [children]);
+  const resolvedMinContentHeight = minPageContentHeight ?? screenHeight * 1.3;
+
   const tabCount = tabs.length;
 
   const { top: topInset, bottom: bottomInset } = useSafeAreaInsets();
@@ -67,17 +115,42 @@ export function Container(props: ContainerProps) {
   const headerHeight = useSharedValue(0);
   const scrollY = useSharedValue(0);
   const activeIndex = useSharedValue(initialIndex);
-  const translateX = useSharedValue(-initialIndex * SCREEN_WIDTH);
+  const translateX = useSharedValue(-initialIndex * screenWidth);
   const startX = useSharedValue(0);
   const isPanning = useSharedValue(false);
   const pillWidth = useSharedValue(0);
 
+  // Mirror the live window width into a shared value so worklets read the
+  // current width after rotation / split-view / foldable resizes.
+  const pageWidth = useSharedValue(screenWidth);
+  useEffect(() => {
+    pageWidth.value = screenWidth;
+    // Re-anchor the pager to the active page at the new width, no animation.
+    cancelAnimation(translateX);
+    translateX.value = -activeIndex.value * screenWidth;
+  }, [screenWidth, activeIndex, pageWidth, translateX]);
+
+  // Honor the OS "reduce motion" setting: snap instantly instead of springing.
+  // Mirrored into a shared value so the pan worklet can read the live value.
+  const reduceMotion = useReducedMotion();
+  const reduceMotionSV = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionSV.value = reduceMotion;
+  }, [reduceMotion, reduceMotionSV]);
+
+  // scrollEnabled is JS state rather than an animated prop. Toggling via
+  // useAnimatedProps fails when forwarded into hosts that wrap RN's old
+  // Animated.ScrollView (e.g. @legendapp/list v2): RN's Animated.* tries to
+  // walk the reanimated handle and trips its dev-only guard.
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+
   const pagerOffset = useDerivedValue(() =>
-    Math.max(0, Math.min(-translateX.value / SCREEN_WIDTH, tabCount - 1))
+    Math.max(0, Math.min(-translateX.value / pageWidth.value, tabCount - 1))
   );
 
-  // Pre-allocate refs and per-page scrollY values. Tab count must be stable
-  // across renders or React's hook order will break.
+  // Pre-allocate refs and per-page scrollY values. Tab count is stable for the
+  // lifetime of this component (the outer Container remounts it on change), so
+  // these hook loops always run the same number of times per mount.
   const listRefs: AnimatedRef<any>[] = [];
   const perPageScrollY: SharedValue<number>[] = [];
   for (let i = 0; i < tabCount; i++) {
@@ -130,15 +203,27 @@ export function Container(props: ContainerProps) {
     [tabCount]
   );
 
-  const spring = { ...DEFAULT_SPRING, ...(springConfig ?? {}) };
+  const spring = useMemo(
+    () => ({ ...DEFAULT_SPRING, ...(springConfig ?? {}) }),
+    [springConfig]
+  );
 
-  const panGesture = Gesture.Pan()
-    .enabled(swipeEnabled)
-    .activeOffsetX([-swipeActivationDistance, swipeActivationDistance])
-    .failOffsetY([-swipeFailDistance, swipeFailDistance])
-    .onStart(() => {
+  // Gesture Handler v3 hooks memoize internally — no useMemo wrapper needed.
+  // The Native gesture lets the inner scroll view keep working while the pan
+  // recognizes horizontally; the two run simultaneously below.
+  const nativeGesture = useNativeGesture();
+
+  const panGesture = usePanGesture({
+    enabled: swipeEnabled,
+    activeOffsetX: [-swipeActivationDistance, swipeActivationDistance],
+    failOffsetY: [-swipeFailDistance, swipeFailDistance],
+    // Refuse to activate in the left-edge zone so iOS edge-swipe-back /
+    // Android gesture-nav stay responsive.
+    hitSlop: { left: -EDGE_SWIPE_MARGIN },
+    onActivate: () => {
       'worklet';
       isPanning.value = true;
+      scheduleOnRN(setScrollEnabled, false);
       startX.value = translateX.value;
       for (let i = 0; i < listRefs.length; i++) {
         const ref = listRefs[i];
@@ -146,58 +231,119 @@ export function Container(props: ContainerProps) {
         if (ref && y) scrollTo(ref, 0, y.value, false);
       }
       syncLists(activeIndex.value);
-    })
-    .onUpdate((e) => {
+    },
+    onUpdate: (e) => {
       'worklet';
       if (!isPanning.value) return;
-      translateX.value = startX.value + e.translationX;
-    })
-    .onEnd((e) => {
+      const w = pageWidth.value;
+      const raw = startX.value + e.translationX;
+      // Rubber-band past first/last page: matches iOS feel.
+      translateX.value = rubberBand(raw, -(tabCount - 1) * w, 0);
+    },
+    onDeactivate: (e) => {
       'worklet';
-      const moved = e.translationX;
+      const w = pageWidth.value;
       const velocity = e.velocityX;
+      // Project where the finger is heading rather than only where it
+      // released, so a short fast flick still flips the page (iOS feel).
+      activeIndex.value = resolveSnapIndex(
+        activeIndex.value,
+        e.translationX,
+        velocity,
+        w,
+        tabCount
+      );
 
-      if (moved < -SCREEN_WIDTH / 4 || velocity < -800) {
-        activeIndex.value = Math.min(activeIndex.value + 1, tabCount - 1);
-      } else if (moved > SCREEN_WIDTH / 4 || velocity > 800) {
-        activeIndex.value = Math.max(activeIndex.value - 1, 0);
+      const target = -activeIndex.value * w;
+      if (reduceMotionSV.value) {
+        translateX.value = target;
+      } else {
+        // Hand the release velocity to the spring so the snap continues the
+        // flick instead of restarting from rest.
+        translateX.value = withSpring(target, { ...spring, velocity });
       }
-
-      translateX.value = withSpring(-activeIndex.value * SCREEN_WIDTH, spring);
       syncLists(activeIndex.value);
-    })
-    .onFinalize(() => {
+    },
+    onFinalize: () => {
       'worklet';
       isPanning.value = false;
-    });
+      scheduleOnRN(setScrollEnabled, true);
+    },
+  });
 
-  const composedGesture = Gesture.Simultaneous(panGesture, Gesture.Native());
+  const composedGesture = useSimultaneousGestures(panGesture, nativeGesture);
 
   const pagerStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const scrollEnabledProps = useAnimatedProps(() => ({
-    scrollEnabled: !isPanning.value,
-  })) as unknown as { scrollEnabled: boolean };
+  const stretch = pullDownBehavior === 'stretch';
+  const collapsibleHeaderStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      transform: [
+        {
+          translateY: collapseTranslateY(
+            scrollY.value,
+            headerHeight.value,
+            stretch
+          ),
+        },
+      ],
+    };
+  });
+
+  const goToIndex = useCallback(
+    (index: number, animated: boolean = true) => {
+      const clamped = Math.max(0, Math.min(index, tabCount - 1));
+      const current = activeIndex.value;
+      const distance = Math.abs(clamped - current);
+      const target = -clamped * pageWidth.value;
+
+      activeIndex.value = clamped;
+      cancelAnimation(translateX);
+      runOnUISync(syncLists);
+
+      if (!animated || reduceMotionSV.value) {
+        translateX.value = target;
+        runOnUISync(syncLists);
+      } else {
+        const duration = 250 + distance * 50;
+        translateX.value = withTiming(
+          target,
+          { duration, easing: Easing.out(Easing.quad) },
+          () => {
+            'worklet';
+            syncLists();
+          }
+        );
+      }
+      onIndexChange?.(clamped);
+    },
+    [
+      activeIndex,
+      translateX,
+      pageWidth,
+      syncLists,
+      onIndexChange,
+      tabCount,
+      reduceMotionSV,
+    ]
+  );
 
   const handleTabPress = useCallback(
-    (index: number) => {
-      const distance = Math.abs(index - activeIndex.value);
-      const duration = 250 + distance * 50;
-      activeIndex.value = index;
-      cancelAnimation(translateX);
-      translateX.value = withTiming(
-        -index * SCREEN_WIDTH,
-        { duration, easing: Easing.out(Easing.quad) },
-        () => {
-          'worklet';
-          syncLists();
-        }
-      );
-      onIndexChange?.(index);
-    },
-    [activeIndex, translateX, syncLists, onIndexChange]
+    (index: number) => goToIndex(index, true),
+    [goToIndex]
+  );
+
+  useImperativeHandle(
+    containerRef,
+    () => ({
+      setIndex: (index: number, animated: boolean = true) =>
+        goToIndex(index, animated),
+      getIndex: () => Math.round(activeIndex.value),
+    }),
+    [goToIndex, activeIndex]
   );
 
   const contextValue: InternalTabsContextValue = useMemo(
@@ -211,20 +357,20 @@ export function Container(props: ContainerProps) {
       tabBarHeight,
       topInset,
       bottomInset,
-      minPageContentHeight,
+      minPageContentHeight: resolvedMinContentHeight,
       listRefs,
       perPageScrollY,
       scrollHandlers,
-      panGesture: composedGesture,
-      scrollEnabledProps,
+      scrollEnabled,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
+      scrollEnabled,
       pinnedHeaderHeight,
       tabBarHeight,
       topInset,
       bottomInset,
-      minPageContentHeight,
+      resolvedMinContentHeight,
       tabCount,
     ]
   );
@@ -239,6 +385,7 @@ export function Container(props: ContainerProps) {
     pinnedHeaderHeight,
     tabBarHeight,
     topInset,
+    pullDownBehavior,
     onTabPress: handleTabPress,
   };
 
@@ -255,44 +402,59 @@ export function Container(props: ContainerProps) {
           <View
             style={[
               styles.pinnedHeader,
-              { height: pinnedHeaderHeight + topInset, paddingTop: topInset },
+              { height: pinnedHeaderHeight + topInset },
             ]}
             pointerEvents="box-none"
           >
-            {renderPinnedHeader()}
+            {renderPinnedHeader({
+              scrollY,
+              headerHeight,
+              topInset,
+              pinnedHeaderHeight,
+            })}
           </View>
         ) : null}
 
         {renderHeader ? (
-          <View
-            style={[styles.collapsibleHeader, { top: pinnedTotal }]}
+          <Animated.View
+            style={[
+              styles.collapsibleHeader,
+              { top: pinnedTotal },
+              collapsibleHeaderStyle,
+            ]}
             pointerEvents="box-none"
             onLayout={(e) => {
               headerHeight.value = e.nativeEvent.layout.height;
             }}
           >
-            {renderHeader()}
-          </View>
+            {renderHeader({
+              scrollY,
+              headerHeight,
+              topInset,
+              pinnedHeaderHeight,
+            })}
+          </Animated.View>
         ) : null}
 
-        <View
-          style={[styles.tabBarSlot, { top: pinnedTotal }]}
-          pointerEvents="box-none"
-        >
+        <View style={styles.tabBarSlot} pointerEvents="box-none">
           {tabBarNode}
         </View>
 
         <View style={styles.pagerHost}>
-          <GestureDetector gesture={composedGesture}>
+          <GestureDetector gesture={composedGesture} touchAction="pan-y">
             <Animated.View
               style={[
                 styles.pager,
-                { width: SCREEN_WIDTH * tabCount },
+                { width: screenWidth * tabCount },
                 pagerStyle,
               ]}
             >
               {tabs.map((t, index) => (
-                <View key={t.key} style={styles.page} collapsable={false}>
+                <View
+                  key={t.key}
+                  style={[styles.page, { width: screenWidth }]}
+                  collapsable={false}
+                >
                   <TabIndexContext.Provider value={index}>
                     {t.children}
                   </TabIndexContext.Provider>
@@ -301,8 +463,6 @@ export function Container(props: ContainerProps) {
             </Animated.View>
           </GestureDetector>
         </View>
-
-        <View pointerEvents="box-only" style={styles.edgeBlocker} />
       </View>
     </TabsContext.Provider>
   );
@@ -326,20 +486,14 @@ const styles = StyleSheet.create({
   },
   tabBarSlot: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     zIndex: 20,
   },
   pagerHost: { flex: 1 },
-  pager: { flexDirection: 'row', flex: 1 },
-  page: { width: SCREEN_WIDTH, height: '100%' },
-  edgeBlocker: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 20,
-    backgroundColor: 'transparent',
-    zIndex: 1000,
-  },
+  // direction:'ltr' pins the pager row so the manual translateX math stays
+  // valid under RTL locales (RN otherwise auto-flips row layout).
+  pager: { flexDirection: 'row', flex: 1, direction: 'ltr' },
+  page: { height: '100%' },
 });

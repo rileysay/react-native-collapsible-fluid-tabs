@@ -21,8 +21,15 @@ npm install react-native-collapsible-fluid-tabs
 You also need these peers (any RN/Expo project working with Reanimated 4 will already have them):
 
 ```sh
-npm install react-native-reanimated react-native-gesture-handler react-native-safe-area-context
+npm install react-native-reanimated react-native-gesture-handler react-native-safe-area-context react-native-worklets
 ```
+
+**Version requirements:** this package uses the Gesture Handler v3 hook API (`usePanGesture`, `useNativeGesture`) and Reanimated 4, so you need:
+
+- `react-native-gesture-handler` **>= 3.0.0**
+- `react-native-reanimated` **>= 4.0.0**
+- `react-native-worklets` **>= 0.7.0**
+- `react-native-safe-area-context` **>= 4.0.0**
 
 ### Setup
 
@@ -104,7 +111,7 @@ export function ProfileScreen() {
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `children` | `ReactNode` | — | One or more `<Tabs.Tab>` children. **Tab count must be stable across renders.** |
+| `children` | `ReactNode` | — | One or more `<Tabs.Tab>` children. Changing the *number* of tabs remounts the pager (see Notes). |
 | `renderHeader` | `() => ReactNode` | — | The collapsing header, rendered above the tabs. Its measured height drives the collapse animation. |
 | `renderPinnedHeader` | `() => ReactNode` | — | Optional always-visible header pinned to the top. |
 | `pinnedHeaderHeight` | `number` | `0` | Height of the pinned header (excluding the safe-area top inset, which is added automatically). |
@@ -118,6 +125,32 @@ export function ProfileScreen() {
 | `swipeFailDistance` | `number` | `10` | Vertical movement that cancels swipe in favor of vertical scroll. |
 | `springConfig` | `SpringConfig` | `{ damping: 30, stiffness: 200, overshootClamping: true }` | Spring used when settling the pager after a swipe. |
 | `minPageContentHeight` | `number` | `1.3 × screen height` | Minimum content height per page so short pages still collapse the header. |
+| `pullDownBehavior` | `'stretch' \| 'static'` | `'static'` | Overscroll (pull-down) behavior. `'static'`: header stays put, list bounces independently. `'stretch'`: header translates down with the pull. Affects where `RefreshControl` appears — see the type docs. |
+
+#### Imperative ref
+
+Pass a `ref` to drive the active tab from outside (deep links, a "next" button, etc.). The ref exposes a `TabsRef`:
+
+```tsx
+import { useRef } from 'react';
+import { Tabs, type TabsRef } from 'react-native-collapsible-fluid-tabs';
+
+const tabsRef = useRef<TabsRef>(null);
+
+// jump to the third tab with the snap animation
+tabsRef.current?.setIndex(2);
+// jump instantly, no animation
+tabsRef.current?.setIndex(2, false);
+// read the current snapped index
+const index = tabsRef.current?.getIndex();
+
+<Tabs.Container ref={tabsRef}>{/* ... */}</Tabs.Container>
+```
+
+| Method | Signature | Description |
+|---|---|---|
+| `setIndex` | `(index: number, animated?: boolean) => void` | Move to a tab. Clamped to range. `animated` defaults to `true`; instant moves (or when the OS has reduce-motion enabled) skip the spring. |
+| `getIndex` | `() => number` | The current snapped tab index. |
 
 ### `<Tabs.Tab>`
 
@@ -176,8 +209,7 @@ renderTabBar={(props) => (
   <Tabs.DefaultTabBar
     {...props}
     colors={{
-      floatingBackground: '#fff',
-      pinnedBackground: '#fff',
+      background: '#fff',
       pillBackground: '#000',
       iconTint: '#000',
       labelColor: '#000',
@@ -202,6 +234,7 @@ interface TabBarRenderProps {
   pinnedHeaderHeight: number;
   tabBarHeight: number;
   topInset: number;
+  pullDownBehavior: 'stretch' | 'static'; // mirror the container's overscroll mode
   onTabPress: (index: number) => void;
 }
 ```
@@ -220,8 +253,10 @@ import { useTabsContext, useTabIndex } from 'react-native-collapsible-fluid-tabs
 
 ## Notes
 
-- **Stable tab count.** Adding or removing tabs across renders is not supported — wrap conditional tabs around the whole `<Tabs.Container>` or include all of them and hide content per-tab.
-- **iOS/Android first.** The pager and scroll-sync are tuned for native; web works but hasn't been QA'd yet.
+- **Changing the tab count.** Adding or removing tabs is supported, but doing so remounts the pager (it's keyed on tab count), which resets per-tab scroll positions and returns to `initialIndex`. For a stable experience, keep the count fixed and hide content per-tab where you can; rely on the remount only for genuinely dynamic tab sets.
+- **Reduced motion.** When the OS "reduce motion" accessibility setting is on, tab changes jump instantly instead of springing.
+- **RTL.** The pager forces LTR layout internally so its swipe math stays correct under right-to-left locales; tab *order* is not mirrored.
+- **iOS/Android first.** The pager and scroll-sync are tuned for native; web works (with `touchAction: 'pan-y'` set on the gesture) but hasn't been QA'd yet.
 - **`Tabs.FlatList` ref.** A forwarded ref hands you back the underlying `FlatList`. The container also keeps an internal animated ref it uses for `scrollTo` synchronization.
 
 ## License
