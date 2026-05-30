@@ -54,7 +54,6 @@ function TabsFlatListInner<T>(
         {renderInjected(userListHeader)}
       </>
     ),
-    // headerSpacerStyle is stable; user component identity drives updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [userListHeader]
   );
@@ -86,7 +85,7 @@ function TabsFlatListInner<T>(
       directionalLockEnabled
       nestedScrollEnabled
       showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
-      animatedProps={ctx.scrollEnabledProps}
+      scrollEnabled={ctx.scrollEnabled}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}
       contentContainerStyle={contentContainerStyle}
