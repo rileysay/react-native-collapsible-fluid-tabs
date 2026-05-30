@@ -22,7 +22,10 @@ export type {
   TabProps,
   TabConfig,
   TabBarRenderProps,
+  HeaderRenderProps,
+  PullDownBehavior,
   SpringConfig,
+  TabsRef,
 } from './types';
 export type { TabsFlatListProps } from './components/FlatList';
 export type { TabsScrollViewProps } from './components/ScrollView';

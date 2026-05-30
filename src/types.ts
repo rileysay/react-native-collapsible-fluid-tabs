@@ -5,10 +5,6 @@ import type {
   DerivedValue,
   SharedValue,
 } from 'react-native-reanimated';
-import type {
-  ComposedGesture,
-  GestureType,
-} from 'react-native-gesture-handler';
 
 export interface TabConfig {
   name: string;
@@ -26,6 +22,7 @@ export interface TabBarRenderProps {
   pinnedHeaderHeight: number;
   tabBarHeight: number;
   topInset: number;
+  pullDownBehavior: PullDownBehavior;
   onTabPress: (index: number) => void;
 }
 
@@ -36,10 +33,19 @@ export interface SpringConfig {
   overshootClamping?: boolean;
 }
 
+export interface HeaderRenderProps {
+  scrollY: SharedValue<number>;
+  headerHeight: SharedValue<number>;
+  topInset: number;
+  pinnedHeaderHeight: number;
+}
+
+export type PullDownBehavior = 'stretch' | 'static';
+
 export interface ContainerProps {
   children: ReactNode;
-  renderHeader?: () => ReactNode;
-  renderPinnedHeader?: () => ReactNode;
+  renderHeader?: (props: HeaderRenderProps) => ReactNode;
+  renderPinnedHeader?: (props: HeaderRenderProps) => ReactNode;
   pinnedHeaderHeight?: number;
   tabBarHeight?: number;
   initialIndex?: number;
@@ -51,10 +57,30 @@ export interface ContainerProps {
   swipeFailDistance?: number;
   springConfig?: SpringConfig;
   minPageContentHeight?: number;
+  /**
+   * How the collapsible header behaves on overscroll (pull-down).
+   *
+   * - `'stretch'` — header translates down with the pull. RefreshControl
+   *   appears at the top of the screen, above the translated header. Briefly
+   *   shows a gap between the pinned header and the moving collapsible
+   *   header during the pull.
+   * - `'static'` (default) — header stays put. List bounces independently.
+   *   RefreshControl appears below the header, above the list content (use
+   *   `progressViewOffset={pinnedHeaderHeight + topInset + headerHeight}` on
+   *   Android to position it correctly).
+   */
+  pullDownBehavior?: PullDownBehavior;
 }
 
 export interface TabProps extends TabConfig {
   children: ReactNode;
+}
+
+export interface TabsRef {
+  /** Programmatically move to a tab. Animated by default. */
+  setIndex: (index: number, animated?: boolean) => void;
+  /** The current active tab index. */
+  getIndex: () => number;
 }
 
 export interface InternalTabsContextValue {
@@ -71,8 +97,7 @@ export interface InternalTabsContextValue {
   listRefs: AnimatedRef<any>[];
   perPageScrollY: SharedValue<number>[];
   scrollHandlers: any[];
-  panGesture: ComposedGesture | GestureType;
-  scrollEnabledProps: any;
+  scrollEnabled: boolean;
 }
 
 export const TabSymbol = Symbol.for('collapsible-fluid-tabs/tab');
