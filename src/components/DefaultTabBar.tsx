@@ -1,17 +1,21 @@
-import React, { useState, type ReactNode } from 'react';
+import React, { useRef, useState, type ReactNode } from 'react';
 import {
   Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
+  scrollTo,
   useAnimatedReaction,
+  useAnimatedRef,
   useAnimatedStyle,
+  useSharedValue,
   type DerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -35,6 +39,11 @@ export interface DefaultTabBarProps extends TabBarRenderProps {
   colors?: DefaultTabBarColors;
   /** Side padding inside the pill container. Default 16. */
   sidePadding?: number;
+  /**
+   * Minimum width an equal-width tab may shrink to before the bar switches to
+   * its horizontally scrollable, content-width layout. Default 88.
+   */
+  minTabWidth?: number;
 }
 
 const DEFAULT_COLORS: Required<DefaultTabBarColors> = {
@@ -60,12 +69,18 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     onTabPress,
     colors,
     sidePadding = 16,
+    minTabWidth = 88,
   } = props;
 
   const { width: screenWidth } = useWindowDimensions();
   const c = { ...DEFAULT_COLORS, ...(colors ?? {}) };
   const topOffset = pinnedHeaderHeight + topInset;
   const stretch = pullDownBehavior === 'stretch';
+  const containerWidth = screenWidth - sidePadding * 2;
+
+  // When equal slices would be narrower than minTabWidth, the bar can't show
+  // every tab comfortably — switch to the content-width scrollable layout.
+  const scrollable = containerWidth / tabs.length < minTabWidth;
 
   // Mirror the active page into JS state so each tab can report its
   // accessibilityState. Only fires on whole-page changes, not per frame.
@@ -96,6 +111,60 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     return { transform: [{ translateY }] };
   });
 
+  const shared = {
+    tabs,
+    pagerOffset,
+    activeIndex,
+    selectedIndex,
+    onTabPress,
+    colors: c,
+  };
+
+  return (
+    <Animated.View
+      style={[
+        styles.wrap,
+        {
+          top: topOffset,
+          height: tabBarHeight,
+          backgroundColor: c.background,
+        },
+        wrapStyle,
+      ]}
+    >
+      {scrollable ? (
+        <ScrollableBar {...shared} containerWidth={containerWidth} />
+      ) : (
+        <FitBar
+          {...shared}
+          containerWidth={containerWidth}
+          pillWidth={pillWidth}
+        />
+      )}
+    </Animated.View>
+  );
+}
+
+interface BarProps {
+  tabs: TabConfig[];
+  pagerOffset: DerivedValue<number>;
+  activeIndex: SharedValue<number>;
+  selectedIndex: number;
+  onTabPress: (index: number) => void;
+  colors: Required<DefaultTabBarColors>;
+  containerWidth: number;
+}
+
+/** Equal-width pill bar — the original behavior, unchanged. */
+function FitBar({
+  tabs,
+  pagerOffset,
+  selectedIndex,
+  onTabPress,
+  colors: c,
+  containerWidth,
+  pillWidth,
+}: BarProps & { pillWidth: SharedValue<number> }) {
   const pillStyle = useAnimatedStyle(() => {
     'worklet';
     const maxOffset = (tabs.length - 1) * pillWidth.value;
@@ -111,46 +180,115 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   });
 
   return (
-    <Animated.View
+    <View
+      accessibilityRole="tablist"
       style={[
-        styles.wrap,
-        {
-          top: topOffset,
-          height: tabBarHeight,
-          backgroundColor: c.background,
-        },
-        wrapStyle,
+        styles.pillContainer,
+        { width: containerWidth, backgroundColor: c.trackBackground },
       ]}
+      onLayout={(e) => {
+        pillWidth.value = (e.nativeEvent.layout.width - 6) / tabs.length;
+      }}
     >
-      <View
-        accessibilityRole="tablist"
-        style={[
-          styles.pillContainer,
-          {
-            width: screenWidth - sidePadding * 2,
-            backgroundColor: c.trackBackground,
-          },
-        ]}
-        onLayout={(e) => {
-          pillWidth.value = (e.nativeEvent.layout.width - 6) / tabs.length;
-        }}
-      >
-        <Animated.View style={[styles.pill, pillStyle]} />
+      <Animated.View style={[styles.pill, pillStyle]} />
+      {tabs.map((tab, index) => (
+        <TabButton
+          key={tab.name}
+          index={index}
+          tab={tab}
+          pagerOffset={pagerOffset}
+          iconTint={c.iconTint}
+          labelColor={c.labelColor}
+          selected={index === selectedIndex}
+          onPress={() => onTabPress(index)}
+        />
+      ))}
+    </View>
+  );
+}
 
-        {tabs.map((tab, index) => (
-          <TabButton
-            key={tab.name}
-            index={index}
-            tab={tab}
-            pagerOffset={pagerOffset}
-            iconTint={c.iconTint}
-            labelColor={c.labelColor}
-            selected={index === selectedIndex}
-            onPress={() => onTabPress(index)}
-          />
-        ))}
-      </View>
-    </Animated.View>
+/** Content-width, horizontally scrollable pill bar for many/long tabs. */
+function ScrollableBar({
+  tabs,
+  pagerOffset,
+  activeIndex,
+  selectedIndex,
+  onTabPress,
+  colors: c,
+  containerWidth,
+}: BarProps) {
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // Measured { x, width } for each tab, in content coordinates — drives the
+  // variable-width pill and the auto-scroll centering.
+  const tabLayouts = useSharedValue<{ x: number; width: number }[]>([]);
+  const layoutsRef = useRef<{ x: number; width: number }[]>([]);
+
+  const setLayout = (index: number, x: number, width: number) => {
+    layoutsRef.current[index] = { x, width };
+    // Reassign so the worklet sees a new reference once all tabs are in.
+    if (layoutsRef.current.filter(Boolean).length === tabs.length) {
+      tabLayouts.value = layoutsRef.current.slice();
+    }
+  };
+
+  const pillStyle = useAnimatedStyle(() => {
+    'worklet';
+    const layouts = tabLayouts.value;
+    if (layouts.length < tabs.length) {
+      return { opacity: 0, width: 0, transform: [{ translateX: 0 }] };
+    }
+    const offset = Math.max(0, Math.min(pagerOffset.value, tabs.length - 1));
+    const i = Math.floor(offset);
+    const f = offset - i;
+    const a = layouts[i]!;
+    const b = layouts[Math.min(i + 1, tabs.length - 1)]!;
+    return {
+      opacity: 1,
+      width: a.width + (b.width - a.width) * f,
+      transform: [{ translateX: a.x + (b.x - a.x) * f }],
+      backgroundColor: c.pillBackground,
+    };
+  });
+
+  // Keep the active tab centred as it changes (tap or swipe settle).
+  useAnimatedReaction(
+    () => Math.round(activeIndex.value),
+    (i) => {
+      const layouts = tabLayouts.value;
+      if (layouts.length < tabs.length) return;
+      const tab = layouts[Math.max(0, Math.min(i, tabs.length - 1))]!;
+      const target = tab.x + tab.width / 2 - containerWidth / 2;
+      scrollTo(scrollRef, Math.max(0, target), 0, true);
+    }
+  );
+
+  return (
+    <Animated.ScrollView
+      ref={scrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      accessibilityRole="tablist"
+      style={[
+        styles.scrollBar,
+        { maxWidth: containerWidth, backgroundColor: c.trackBackground },
+      ]}
+      contentContainerStyle={styles.scrollContent}
+    >
+      <Animated.View style={[styles.pill, pillStyle]} />
+      {tabs.map((tab, index) => (
+        <TabButton
+          key={tab.name}
+          index={index}
+          tab={tab}
+          pagerOffset={pagerOffset}
+          iconTint={c.iconTint}
+          labelColor={c.labelColor}
+          selected={index === selectedIndex}
+          onPress={() => onTabPress(index)}
+          onMeasure={setLayout}
+        />
+      ))}
+    </Animated.ScrollView>
   );
 }
 
@@ -162,6 +300,8 @@ interface TabButtonProps {
   labelColor: string;
   selected: boolean;
   onPress: () => void;
+  /** When provided, the button reports its layout and uses content width. */
+  onMeasure?: (index: number, x: number, width: number) => void;
 }
 
 function TabButton({
@@ -172,6 +312,7 @@ function TabButton({
   labelColor,
   selected,
   onPress,
+  onMeasure,
 }: TabButtonProps) {
   const animStyle = useAnimatedStyle(() => {
     const distance = Math.abs(pagerOffset.value - index);
@@ -182,10 +323,18 @@ function TabButton({
     return { opacity };
   });
 
+  const handleLayout = onMeasure
+    ? (e: LayoutChangeEvent) => {
+        const { x, width } = e.nativeEvent.layout;
+        onMeasure(index, x, width);
+      }
+    : undefined;
+
   return (
     <Pressable
-      style={styles.tabButton}
+      style={onMeasure ? styles.tabButtonScroll : styles.tabButton}
       onPress={onPress}
+      onLayout={handleLayout}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       accessibilityLabel={tab.label ?? tab.name}
@@ -227,6 +376,14 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     padding: 3,
   },
+  scrollBar: {
+    borderRadius: 100,
+    flexGrow: 0,
+  },
+  scrollContent: {
+    flexDirection: 'row',
+    padding: 3,
+  },
   pill: {
     position: 'absolute',
     top: 3,
@@ -241,6 +398,11 @@ const styles = StyleSheet.create({
   tabButton: {
     flex: 1,
     paddingVertical: 8,
+    alignItems: 'center',
+  },
+  tabButtonScroll: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
     alignItems: 'center',
   },
   tabButtonInner: {

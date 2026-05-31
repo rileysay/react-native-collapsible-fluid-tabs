@@ -1,5 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
 import { type FlatListProps, type FlatList as RNFlatList } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
@@ -25,6 +26,7 @@ function TabsFlatListInner<T>(
 
   const ref = ctx.listRefs[index] as React.Ref<RNFlatList<T>>;
   const scrollHandler = ctx.scrollHandlers[index];
+  const nativeGesture = ctx.listNativeGestures[index];
 
   useImperativeHandle(
     forwardedRef,
@@ -77,19 +79,22 @@ function TabsFlatListInner<T>(
     Animated.FlatList as unknown as React.ComponentType<any>;
 
   return (
-    <AnimatedFlatList
-      {...(props as FlatListProps<T>)}
-      ref={ref}
-      onScroll={scrollHandler}
-      scrollEventThrottle={1}
-      directionalLockEnabled
-      nestedScrollEnabled
-      showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
-      scrollEnabled={ctx.scrollEnabled}
-      ListHeaderComponent={ListHeaderComponent}
-      ListFooterComponent={ListFooterComponent}
-      contentContainerStyle={contentContainerStyle}
-    />
+    <GestureDetector gesture={nativeGesture}>
+      <AnimatedFlatList
+        {...(props as FlatListProps<T>)}
+        ref={ref}
+        onScroll={scrollHandler}
+        scrollEventThrottle={1}
+        directionalLockEnabled
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={
+          props.showsVerticalScrollIndicator ?? false
+        }
+        ListHeaderComponent={ListHeaderComponent}
+        ListFooterComponent={ListFooterComponent}
+        contentContainerStyle={contentContainerStyle}
+      />
+    </GestureDetector>
   );
 }
 

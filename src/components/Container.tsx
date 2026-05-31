@@ -4,15 +4,13 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
-  useState,
   type Ref,
 } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import {
   GestureDetector,
   useNativeGesture,
   usePanGesture,
-  useSimultaneousGestures,
 } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -138,12 +136,6 @@ function ContainerImpl(props: ContainerImplProps) {
     reduceMotionSV.value = reduceMotion;
   }, [reduceMotion, reduceMotionSV]);
 
-  // scrollEnabled is JS state rather than an animated prop. Toggling via
-  // useAnimatedProps fails when forwarded into hosts that wrap RN's old
-  // Animated.ScrollView (e.g. @legendapp/list v2): RN's Animated.* tries to
-  // walk the reanimated handle and trips its dev-only guard.
-  const [scrollEnabled, setScrollEnabled] = useState(true);
-
   const pagerOffset = useDerivedValue(() =>
     Math.max(0, Math.min(-translateX.value / pageWidth.value, tabCount - 1))
   );
@@ -208,11 +200,16 @@ function ContainerImpl(props: ContainerImplProps) {
     [springConfig]
   );
 
-  // Gesture Handler v3 hooks memoize internally — no useMemo wrapper needed.
-  // The Native gesture lets the inner scroll view keep working while the pan
-  // recognizes horizontally; the two run simultaneously below.
-  const nativeGesture = useNativeGesture();
+  // Notify JS of tab changes from the pan worklet (tap/imperative changes go
+  // through goToIndex, which calls onIndexChange directly).
+  const notifyIndexChange = useCallback(
+    (index: number) => {
+      onIndexChange?.(index);
+    },
+    [onIndexChange]
+  );
 
+  // Gesture Handler v3 hooks memoize internally — no useMemo wrapper needed.
   const panGesture = usePanGesture({
     enabled: swipeEnabled,
     activeOffsetX: [-swipeActivationDistance, swipeActivationDistance],
@@ -223,7 +220,6 @@ function ContainerImpl(props: ContainerImplProps) {
     onActivate: () => {
       'worklet';
       isPanning.value = true;
-      scheduleOnRN(setScrollEnabled, false);
       startX.value = translateX.value;
       for (let i = 0; i < listRefs.length; i++) {
         const ref = listRefs[i];
@@ -244,17 +240,19 @@ function ContainerImpl(props: ContainerImplProps) {
       'worklet';
       const w = pageWidth.value;
       const velocity = e.velocityX;
+      const prevIndex = activeIndex.value;
       // Project where the finger is heading rather than only where it
       // released, so a short fast flick still flips the page (iOS feel).
-      activeIndex.value = resolveSnapIndex(
-        activeIndex.value,
+      const nextIndex = resolveSnapIndex(
+        prevIndex,
         e.translationX,
         velocity,
         w,
         tabCount
       );
+      activeIndex.value = nextIndex;
 
-      const target = -activeIndex.value * w;
+      const target = -nextIndex * w;
       if (reduceMotionSV.value) {
         translateX.value = target;
       } else {
@@ -262,16 +260,32 @@ function ContainerImpl(props: ContainerImplProps) {
         // flick instead of restarting from rest.
         translateX.value = withSpring(target, { ...spring, velocity });
       }
-      syncLists(activeIndex.value);
+      syncLists(nextIndex);
+      // A swipe that lands on a different tab must fire onIndexChange too.
+      if (nextIndex !== prevIndex) {
+        scheduleOnRN(notifyIndexChange, nextIndex);
+      }
     },
     onFinalize: () => {
       'worklet';
       isPanning.value = false;
-      scheduleOnRN(setScrollEnabled, true);
     },
   });
 
-  const composedGesture = useSimultaneousGestures(panGesture, nativeGesture);
+  // Each scroll view gets its own Native gesture. Wrapping the RN scroll view
+  // in a Native gesture is required on Android — otherwise RNGH consumes the
+  // touch at the native level and the list never scrolls inside the pan's
+  // detector region. `requireToFail: panGesture` makes the scroll wait for the
+  // pan to fail before it activates: a horizontal drag activates the pan (the
+  // pan never fails) so the list stays frozen during a page swipe (no scroll
+  // flick), while a vertical drag fails the pan quickly (failOffsetY) and the
+  // scroll takes over. tabCount is stable for this component's lifetime.
+  const listNativeGestures: ReturnType<typeof useNativeGesture>[] = [];
+  for (let i = 0; i < tabCount; i++) {
+    /* eslint-disable react-hooks/rules-of-hooks */
+    listNativeGestures.push(useNativeGesture({ requireToFail: panGesture }));
+    /* eslint-enable react-hooks/rules-of-hooks */
+  }
 
   const pagerStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -293,6 +307,18 @@ function ContainerImpl(props: ContainerImplProps) {
     };
   });
 
+  // syncLists is a worklet that calls scrollTo (a UI-thread op on native), so
+  // on native we hop to the UI thread synchronously. Web has no separate UI
+  // thread and react-native-worklets does not implement runOnUISync there, so
+  // we invoke the worklet inline (it runs on the JS/main thread on web).
+  const runSyncListsNow = useCallback(() => {
+    if (Platform.OS === 'web') {
+      syncLists();
+    } else {
+      runOnUISync(syncLists);
+    }
+  }, [syncLists]);
+
   const goToIndex = useCallback(
     (index: number, animated: boolean = true) => {
       const clamped = Math.max(0, Math.min(index, tabCount - 1));
@@ -302,11 +328,11 @@ function ContainerImpl(props: ContainerImplProps) {
 
       activeIndex.value = clamped;
       cancelAnimation(translateX);
-      runOnUISync(syncLists);
+      runSyncListsNow();
 
       if (!animated || reduceMotionSV.value) {
         translateX.value = target;
-        runOnUISync(syncLists);
+        runSyncListsNow();
       } else {
         const duration = 250 + distance * 50;
         translateX.value = withTiming(
@@ -325,6 +351,7 @@ function ContainerImpl(props: ContainerImplProps) {
       translateX,
       pageWidth,
       syncLists,
+      runSyncListsNow,
       onIndexChange,
       tabCount,
       reduceMotionSV,
@@ -361,11 +388,10 @@ function ContainerImpl(props: ContainerImplProps) {
       listRefs,
       perPageScrollY,
       scrollHandlers,
-      scrollEnabled,
+      listNativeGestures,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      scrollEnabled,
       pinnedHeaderHeight,
       tabBarHeight,
       topInset,
@@ -441,7 +467,7 @@ function ContainerImpl(props: ContainerImplProps) {
         </View>
 
         <View style={styles.pagerHost}>
-          <GestureDetector gesture={composedGesture} touchAction="pan-y">
+          <GestureDetector gesture={panGesture} touchAction="pan-y">
             <Animated.View
               style={[
                 styles.pager,
@@ -493,7 +519,13 @@ const styles = StyleSheet.create({
   },
   pagerHost: { flex: 1 },
   // direction:'ltr' pins the pager row so the manual translateX math stays
-  // valid under RTL locales (RN otherwise auto-flips row layout).
-  pager: { flexDirection: 'row', flex: 1, direction: 'ltr' },
+  // valid under RTL locales (RN otherwise auto-flips row layout). It is a
+  // valid Yoga style on native, but react-native-web rejects `direction` as a
+  // style prop, so apply it on native only — web is LTR by default.
+  pager: {
+    flexDirection: 'row',
+    flex: 1,
+    ...(Platform.OS === 'web' ? null : { direction: 'ltr' as const }),
+  },
   page: { height: '100%' },
 });
