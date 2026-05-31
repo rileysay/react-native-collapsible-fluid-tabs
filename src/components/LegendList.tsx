@@ -1,7 +1,12 @@
 import React, { useMemo } from 'react';
+import { Platform } from 'react-native';
 import { AnimatedLegendList } from '@legendapp/list/reanimated';
 import type { LegendListProps } from '@legendapp/list/react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedReaction,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
 
@@ -22,6 +27,32 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
 
   const ref = ctx.listRefs[index];
   const scrollHandler = ctx.scrollHandlers[index];
+  const nativeGesture = ctx.listNativeGestures[index];
+  const pageScrollY = ctx.perPageScrollY[index];
+  const isWeb = Platform.OS === 'web';
+
+  // Web only: Legend List's reanimated build reports scroll position
+  // continuously through `sharedValues.scrollOffset` (driven by
+  // useScrollViewOffset). The generic `onScroll` prop, by contrast, rides
+  // Legend List's internal scroll state, which on web updates only at
+  // scroll-settle — so the collapsing header would jump instead of track.
+  // We point scrollOffset at this page's shared value and mirror it into the
+  // shared `scrollY` while the tab is active — exactly what the native
+  // onScroll handler does. On native nothing changes: the proven onScroll path
+  // stays, and this reaction's dependency is constant so it never runs.
+  const sharedValues = useMemo(
+    () => ({ scrollOffset: pageScrollY }),
+    [pageScrollY]
+  );
+  useAnimatedReaction(
+    () => (isWeb ? (pageScrollY?.value ?? 0) : 0),
+    (offset) => {
+      'worklet';
+      if (isWeb && ctx.activeIndex.value === index) {
+        ctx.scrollY.value = offset;
+      }
+    }
+  );
 
   const headerSpacerStyle = useAnimatedStyle(() => ({
     height:
@@ -67,19 +98,23 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
   const Component = AnimatedLegendList as unknown as React.ComponentType<any>;
 
   return (
-    <Component
-      {...(props as LegendListProps<T>)}
-      refScrollView={ref}
-      onScroll={scrollHandler}
-      scrollEventThrottle={1}
-      directionalLockEnabled
-      nestedScrollEnabled
-      showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
-      scrollEnabled={ctx.scrollEnabled}
-      ListHeaderComponent={ListHeaderComponent}
-      ListFooterComponent={ListFooterComponent}
-      contentContainerStyle={contentContainerStyle}
-    />
+    <GestureDetector gesture={nativeGesture}>
+      <Component
+        {...(props as LegendListProps<T>)}
+        refScrollView={ref}
+        {...(isWeb
+          ? { sharedValues }
+          : { onScroll: scrollHandler, scrollEventThrottle: 1 })}
+        directionalLockEnabled
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={
+          props.showsVerticalScrollIndicator ?? false
+        }
+        ListHeaderComponent={ListHeaderComponent}
+        ListFooterComponent={ListFooterComponent}
+        contentContainerStyle={contentContainerStyle}
+      />
+    </GestureDetector>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   type ScrollView as RNScrollView,
   View,
 } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
@@ -23,6 +24,7 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
 
     const ref = ctx.listRefs[index] as React.Ref<RNScrollView>;
     const scrollHandler = ctx.scrollHandlers[index];
+    const nativeGesture = ctx.listNativeGestures[index];
 
     useImperativeHandle(
       forwardedRef,
@@ -50,23 +52,24 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
       Animated.ScrollView as unknown as React.ComponentType<any>;
 
     return (
-      <AnimatedScrollView
-        {...(props as ScrollViewProps)}
-        ref={ref}
-        onScroll={scrollHandler}
-        scrollEventThrottle={1}
-        directionalLockEnabled
-        nestedScrollEnabled
-        showsVerticalScrollIndicator={
-          props.showsVerticalScrollIndicator ?? false
-        }
-        scrollEnabled={ctx.scrollEnabled}
-        contentContainerStyle={contentContainerStyle}
-      >
-        <Animated.View style={headerSpacerStyle} />
-        <View>{props.children}</View>
-        <Animated.View style={footerSpacerStyle} />
-      </AnimatedScrollView>
+      <GestureDetector gesture={nativeGesture}>
+        <AnimatedScrollView
+          {...(props as ScrollViewProps)}
+          ref={ref}
+          onScroll={scrollHandler}
+          scrollEventThrottle={1}
+          directionalLockEnabled
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={
+            props.showsVerticalScrollIndicator ?? false
+          }
+          contentContainerStyle={contentContainerStyle}
+        >
+          <Animated.View style={headerSpacerStyle} />
+          <View>{props.children}</View>
+          <Animated.View style={footerSpacerStyle} />
+        </AnimatedScrollView>
+      </GestureDetector>
     );
   }
 );

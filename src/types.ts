@@ -97,7 +97,9 @@ export interface InternalTabsContextValue {
   listRefs: AnimatedRef<any>[];
   perPageScrollY: SharedValue<number>[];
   scrollHandlers: any[];
-  scrollEnabled: boolean;
+  /** Per-tab Native gestures wrapping each scroll view. They `requireToFail`
+   * the pager pan so the list stays frozen during a horizontal page swipe. */
+  listNativeGestures: any[];
 }
 
 export const TabSymbol = Symbol.for('collapsible-fluid-tabs/tab');
