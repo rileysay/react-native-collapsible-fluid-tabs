@@ -115,7 +115,9 @@ function TabsFlashListInner<T>(
       function FlashScroll({
         ref: flashScrollRef,
         ...scrollProps
-      }: { ref?: React.Ref<unknown> }) {
+      }: {
+        ref?: React.Ref<unknown>;
+      }) {
         // Fan the scroller node out to both refs: FlashList's own scrollViewRef
         // (so it can measure / drive scrolling) and the Container's animated ref
         // (so reanimated `scrollTo` can sync this page like the others).

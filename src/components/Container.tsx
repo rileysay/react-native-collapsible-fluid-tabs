@@ -476,8 +476,7 @@ function ContainerImpl(props: ContainerImplProps) {
         translateX.value = target;
         runSyncListsNow();
       } else {
-        const duration =
-          SNAP_DURATION_BASE + distance * SNAP_DURATION_PER_PAGE;
+        const duration = SNAP_DURATION_BASE + distance * SNAP_DURATION_PER_PAGE;
         translateX.value = withTiming(
           target,
           { duration, easing: Easing.out(Easing.quad) },
