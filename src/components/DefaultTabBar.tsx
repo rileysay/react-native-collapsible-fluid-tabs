@@ -1,16 +1,18 @@
 import React, { useRef, useState, type ReactNode } from 'react';
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
+import {
+  VirtualGestureDetector,
+  useTapGesture,
+} from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
   interpolate,
-  runOnJS,
   scrollTo,
   useAnimatedReaction,
   useAnimatedRef,
@@ -19,6 +21,7 @@ import Animated, {
   type DerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import type { TabBarRenderProps, TabConfig } from '../types';
 
@@ -42,8 +45,16 @@ export interface DefaultTabBarProps extends TabBarRenderProps {
   /**
    * Minimum width an equal-width tab may shrink to before the bar switches to
    * its horizontally scrollable, content-width layout. Default 88.
+   * Only consulted when `scrollable` is `'auto'`.
    */
   minTabWidth?: number;
+  /**
+   * Layout mode. `'auto'` (default) uses an equal-width pill when the tabs fit
+   * and a scrollable content-width pill when they'd be narrower than
+   * `minTabWidth`. `true` forces the scrollable layout; `false` forces
+   * equal-width (tabs may get cramped).
+   */
+  scrollable?: 'auto' | boolean;
 }
 
 const DEFAULT_COLORS: Required<DefaultTabBarColors> = {
@@ -53,6 +64,16 @@ const DEFAULT_COLORS: Required<DefaultTabBarColors> = {
   iconTint: '#1c1c1e',
   labelColor: '#1c1c1e',
 };
+
+// Inner padding of the pill track (px). The moving pill is offset by this and
+// each tab slot's width subtracts it from both sides — derive both from this one
+// constant so the pill stays aligned if the padding ever changes.
+const PILL_PADDING = 3;
+
+// Tab labels fade from fully opaque (active) to TAB_INACTIVE_OPACITY as the page
+// moves TAB_FADE_DISTANCE (in fractional pages) away from that tab.
+const TAB_INACTIVE_OPACITY = 0.4;
+const TAB_FADE_DISTANCE = 0.5;
 
 export function DefaultTabBar(props: DefaultTabBarProps) {
   const {
@@ -70,6 +91,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     colors,
     sidePadding = 16,
     minTabWidth = 88,
+    scrollable = 'auto',
   } = props;
 
   const { width: screenWidth } = useWindowDimensions();
@@ -78,9 +100,12 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   const stretch = pullDownBehavior === 'stretch';
   const containerWidth = screenWidth - sidePadding * 2;
 
-  // When equal slices would be narrower than minTabWidth, the bar can't show
-  // every tab comfortably — switch to the content-width scrollable layout.
-  const scrollable = containerWidth / tabs.length < minTabWidth;
+  // 'auto': equal-width pill when tabs fit; scrollable content-width pill when
+  // equal slices would be narrower than minTabWidth. true/false force the mode.
+  const isScrollable =
+    scrollable === 'auto'
+      ? containerWidth / tabs.length < minTabWidth
+      : scrollable;
 
   // Mirror the active page into JS state so each tab can report its
   // accessibilityState. Only fires on whole-page changes, not per frame.
@@ -90,7 +115,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   useAnimatedReaction(
     () => Math.round(activeIndex.value),
     (curr, prev) => {
-      if (curr !== prev) runOnJS(setSelectedIndex)(curr);
+      if (curr !== prev) scheduleOnRN(setSelectedIndex, curr);
     }
   );
 
@@ -132,7 +157,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
         wrapStyle,
       ]}
     >
-      {scrollable ? (
+      {isScrollable ? (
         <ScrollableBar {...shared} containerWidth={containerWidth} />
       ) : (
         <FitBar
@@ -174,7 +199,7 @@ function FitBar({
     );
     return {
       width: pillWidth.value,
-      transform: [{ translateX: 3 + clampedX }],
+      transform: [{ translateX: PILL_PADDING + clampedX }],
       backgroundColor: c.pillBackground,
     };
   });
@@ -187,7 +212,8 @@ function FitBar({
         { width: containerWidth, backgroundColor: c.trackBackground },
       ]}
       onLayout={(e) => {
-        pillWidth.value = (e.nativeEvent.layout.width - 6) / tabs.length;
+        pillWidth.value =
+          (e.nativeEvent.layout.width - PILL_PADDING * 2) / tabs.length;
       }}
     >
       <Animated.View style={[styles.pill, pillStyle]} />
@@ -317,10 +343,25 @@ function TabButton({
   const animStyle = useAnimatedStyle(() => {
     const distance = Math.abs(pagerOffset.value - index);
     const opacity =
-      distance < 0.5
-        ? interpolate(distance, [0, 0.5], [1, 0.4], Extrapolation.CLAMP)
-        : 0.4;
+      distance < TAB_FADE_DISTANCE
+        ? interpolate(
+            distance,
+            [0, TAB_FADE_DISTANCE],
+            [1, TAB_INACTIVE_OPACITY],
+            Extrapolation.CLAMP
+          )
+        : TAB_INACTIVE_OPACITY;
     return { opacity };
+  });
+
+  // A tap gesture (not RN's Pressable) keeps the tab button in RNGH's gesture
+  // system alongside the pager pan. Mixing RN touch handlers with RNGH leaves
+  // the touch responder stuck after some gestures (taps stop registering until
+  // another gesture resets it). A Tap's onActivate fires only on a valid tap.
+  const tap = useTapGesture({
+    onActivate: () => {
+      scheduleOnRN(onPress);
+    },
   });
 
   const handleLayout = onMeasure
@@ -331,23 +372,27 @@ function TabButton({
     : undefined;
 
   return (
-    <Pressable
-      style={onMeasure ? styles.tabButtonScroll : styles.tabButton}
-      onPress={onPress}
-      onLayout={handleLayout}
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      accessibilityLabel={tab.label ?? tab.name}
-    >
-      <Animated.View style={[styles.tabButtonInner, animStyle]}>
-        {renderIcon(tab.icon, iconTint)}
-        {tab.label ? (
-          <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
-            {tab.label}
-          </Text>
-        ) : null}
-      </Animated.View>
-    </Pressable>
+    <VirtualGestureDetector gesture={tap}>
+      <View
+        style={onMeasure ? styles.tabButtonScroll : styles.tabButton}
+        onLayout={handleLayout}
+        accessibilityRole="tab"
+        accessibilityState={{ selected }}
+        accessibilityLabel={tab.label ?? tab.name}
+      >
+        <Animated.View style={[styles.tabButtonInner, animStyle]}>
+          {renderIcon(tab.icon, iconTint)}
+          {tab.label ? (
+            <Text
+              style={[styles.label, { color: labelColor }]}
+              numberOfLines={1}
+            >
+              {tab.label}
+            </Text>
+          ) : null}
+        </Animated.View>
+      </View>
+    </VirtualGestureDetector>
   );
 }
 
@@ -374,7 +419,7 @@ const styles = StyleSheet.create({
   pillContainer: {
     flexDirection: 'row',
     borderRadius: 100,
-    padding: 3,
+    padding: PILL_PADDING,
   },
   scrollBar: {
     borderRadius: 100,
@@ -382,12 +427,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexDirection: 'row',
-    padding: 3,
+    padding: PILL_PADDING,
   },
   pill: {
     position: 'absolute',
-    top: 3,
-    bottom: 3,
+    top: PILL_PADDING,
+    bottom: PILL_PADDING,
     left: 0,
     borderRadius: 100,
     shadowColor: '#000',
