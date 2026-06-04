@@ -1,19 +1,28 @@
 import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
-import { type FlatListProps, type FlatList as RNFlatList } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
+import {
+  Platform,
+  type FlatListProps,
+  type FlatList as RNFlatList,
+} from 'react-native';
+import {
+  GestureDetector,
+  VirtualGestureDetector,
+} from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
+import { FOOTER_GAP } from '../constants';
+import { useAutoRefreshControl } from './useAutoRefreshControl';
+
+// Web uses the standalone host GestureDetector; native uses VirtualGestureDetector
+// under the Container's InterceptingGestureDetector. See Container's IS_WEB note.
+const ListDetector =
+  Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
 
 export type TabsFlatListProps<T> = Omit<
   FlatListProps<T>,
   'onScroll' | 'scrollEventThrottle' | 'ref'
 > & {
-  /**
-   * Optional minimum content height. Defaults to the container's
-   * `minPageContentHeight` (1.3x screen height) which keeps short pages
-   * scrollable enough for the collapsing header to feel right.
-   */
   minContentHeight?: number;
 };
 
@@ -25,8 +34,16 @@ function TabsFlatListInner<T>(
   const index = useTabIndex();
 
   const ref = ctx.listRefs[index] as React.Ref<RNFlatList<T>>;
-  const scrollHandler = ctx.scrollHandlers[index];
   const nativeGesture = ctx.listNativeGestures[index];
+  // Reuse the Container's shared UI-thread scroll handler, same as
+  // Tabs.ScrollView and Tabs.FlashList. Negative (overscroll) values are
+  // clamped downstream by collapseTranslateY / the tab bar / collapseProgress,
+  // so no per-list clamping is needed here.
+  const scrollHandler = ctx.scrollHandlers[index];
+  const refreshControl = useAutoRefreshControl(
+    props.refreshControl,
+    nativeGesture
+  );
 
   useImperativeHandle(
     forwardedRef,
@@ -43,7 +60,7 @@ function TabsFlatListInner<T>(
   }));
 
   const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: ctx.tabBarHeight + ctx.bottomInset + 16,
+    height: ctx.tabBarHeight + ctx.bottomInset + FOOTER_GAP,
   }));
 
   const userListHeader = props.ListHeaderComponent;
@@ -67,22 +84,20 @@ function TabsFlatListInner<T>(
         <Animated.View style={footerSpacerStyle} />
       </>
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userListFooter]
+    [userListFooter, footerSpacerStyle]
   );
 
   const minHeight = props.minContentHeight ?? ctx.minPageContentHeight;
-
   const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
-
   const AnimatedFlatList =
     Animated.FlatList as unknown as React.ComponentType<any>;
 
   return (
-    <GestureDetector gesture={nativeGesture}>
+    <ListDetector gesture={nativeGesture}>
       <AnimatedFlatList
         {...(props as FlatListProps<T>)}
         ref={ref}
+        refreshControl={refreshControl}
         onScroll={scrollHandler}
         scrollEventThrottle={1}
         directionalLockEnabled
@@ -94,7 +109,7 @@ function TabsFlatListInner<T>(
         ListFooterComponent={ListFooterComponent}
         contentContainerStyle={contentContainerStyle}
       />
-    </GestureDetector>
+    </ListDetector>
   );
 }
 
