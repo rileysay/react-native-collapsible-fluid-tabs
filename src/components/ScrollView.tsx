@@ -1,13 +1,24 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import {
+  Platform,
   type ScrollViewProps,
   type ScrollView as RNScrollView,
   View,
 } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
+import {
+  GestureDetector,
+  VirtualGestureDetector,
+} from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
+import { FOOTER_GAP } from '../constants';
+import { useAutoRefreshControl } from './useAutoRefreshControl';
+
+// Web uses the standalone host GestureDetector; native uses VirtualGestureDetector
+// under the Container's InterceptingGestureDetector. See Container's IS_WEB note.
+const ListDetector =
+  Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
 
 export type TabsScrollViewProps = Omit<
   ScrollViewProps,
@@ -25,6 +36,10 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
     const ref = ctx.listRefs[index] as React.Ref<RNScrollView>;
     const scrollHandler = ctx.scrollHandlers[index];
     const nativeGesture = ctx.listNativeGestures[index];
+    const refreshControl = useAutoRefreshControl(
+      props.refreshControl,
+      nativeGesture
+    );
 
     useImperativeHandle(
       forwardedRef,
@@ -41,7 +56,7 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
     }));
 
     const footerSpacerStyle = useAnimatedStyle(() => ({
-      height: ctx.tabBarHeight + ctx.bottomInset + 16,
+      height: ctx.tabBarHeight + ctx.bottomInset + FOOTER_GAP,
     }));
 
     const minHeight = props.minContentHeight ?? ctx.minPageContentHeight;
@@ -52,10 +67,11 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
       Animated.ScrollView as unknown as React.ComponentType<any>;
 
     return (
-      <GestureDetector gesture={nativeGesture}>
+      <ListDetector gesture={nativeGesture}>
         <AnimatedScrollView
           {...(props as ScrollViewProps)}
           ref={ref}
+          refreshControl={refreshControl}
           onScroll={scrollHandler}
           scrollEventThrottle={1}
           directionalLockEnabled
@@ -69,7 +85,7 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
           <View>{props.children}</View>
           <Animated.View style={footerSpacerStyle} />
         </AnimatedScrollView>
-      </GestureDetector>
+      </ListDetector>
     );
   }
 );

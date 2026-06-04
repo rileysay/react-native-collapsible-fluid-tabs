@@ -2,13 +2,23 @@ import React, { useMemo } from 'react';
 import { Platform } from 'react-native';
 import { AnimatedLegendList } from '@legendapp/list/reanimated';
 import type { LegendListProps } from '@legendapp/list/react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
+import {
+  GestureDetector,
+  VirtualGestureDetector,
+} from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
 } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
+import { FOOTER_GAP } from '../constants';
+import { useAutoRefreshControl } from './useAutoRefreshControl';
+
+// Web uses the standalone host GestureDetector; native uses VirtualGestureDetector
+// under the Container's InterceptingGestureDetector. See Container's IS_WEB note.
+const ListDetector =
+  Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
 
 export type TabsLegendListProps<T> = Omit<
   LegendListProps<T>,
@@ -26,29 +36,26 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
   const index = useTabIndex();
 
   const ref = ctx.listRefs[index];
-  const scrollHandler = ctx.scrollHandlers[index];
   const nativeGesture = ctx.listNativeGestures[index];
+  const refreshControl = useAutoRefreshControl(
+    props.refreshControl,
+    nativeGesture
+  );
   const pageScrollY = ctx.perPageScrollY[index];
-  const isWeb = Platform.OS === 'web';
 
-  // Web only: Legend List's reanimated build reports scroll position
-  // continuously through `sharedValues.scrollOffset` (driven by
-  // useScrollViewOffset). The generic `onScroll` prop, by contrast, rides
-  // Legend List's internal scroll state, which on web updates only at
-  // scroll-settle — so the collapsing header would jump instead of track.
-  // We point scrollOffset at this page's shared value and mirror it into the
-  // shared `scrollY` while the tab is active — exactly what the native
-  // onScroll handler does. On native nothing changes: the proven onScroll path
-  // stays, and this reaction's dependency is constant so it never runs.
+  // Legend List exposes a shared scroll offset from its reanimated build. Use
+  // that value on every platform so the collapsible header follows the same
+  // shared-value path instead of mixing shared values on web with scroll events
+  // on native.
   const sharedValues = useMemo(
     () => ({ scrollOffset: pageScrollY }),
     [pageScrollY]
   );
   useAnimatedReaction(
-    () => (isWeb ? (pageScrollY?.value ?? 0) : 0),
+    () => pageScrollY?.value ?? 0,
     (offset) => {
       'worklet';
-      if (isWeb && ctx.activeIndex.value === index) {
+      if (ctx.activeIndex.value === index) {
         ctx.scrollY.value = offset;
       }
     }
@@ -63,7 +70,7 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
   }));
 
   const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: ctx.tabBarHeight + ctx.bottomInset + 16,
+    height: ctx.tabBarHeight + ctx.bottomInset + FOOTER_GAP,
   }));
 
   const userListHeader = props.ListHeaderComponent;
@@ -98,13 +105,12 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
   const Component = AnimatedLegendList as unknown as React.ComponentType<any>;
 
   return (
-    <GestureDetector gesture={nativeGesture}>
+    <ListDetector gesture={nativeGesture}>
       <Component
         {...(props as LegendListProps<T>)}
         refScrollView={ref}
-        {...(isWeb
-          ? { sharedValues }
-          : { onScroll: scrollHandler, scrollEventThrottle: 1 })}
+        refreshControl={refreshControl}
+        sharedValues={sharedValues}
         directionalLockEnabled
         nestedScrollEnabled
         showsVerticalScrollIndicator={
@@ -114,7 +120,7 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
         ListFooterComponent={ListFooterComponent}
         contentContainerStyle={contentContainerStyle}
       />
-    </GestureDetector>
+    </ListDetector>
   );
 }
 

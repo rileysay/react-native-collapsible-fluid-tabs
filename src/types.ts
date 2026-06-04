@@ -41,6 +41,7 @@ export interface HeaderRenderProps {
 }
 
 export type PullDownBehavior = 'stretch' | 'static';
+export type SwipeGestureTopInset = 'auto' | number;
 
 export interface ContainerProps {
   children: ReactNode;
@@ -55,8 +56,32 @@ export interface ContainerProps {
   swipeEnabled?: boolean;
   swipeActivationDistance?: number;
   swipeFailDistance?: number;
+  /**
+   * Top area where the horizontal pager pan should not activate. `'auto'`
+   * (default) excludes the pinned header, safe-area inset, collapsible header,
+   * and tab bar so touches over profile/header chrome keep behaving like
+   * vertical list scroll/refresh gestures. Pass `0` to allow pager swipes from
+   * the full page height.
+   */
+  swipeGestureTopInset?: SwipeGestureTopInset;
   springConfig?: SpringConfig;
   minPageContentHeight?: number;
+  /**
+   * Optional first-frame estimate for the collapsible header height. The real
+   * measured height still wins after layout, but this keeps list spacers from
+   * starting at 0 and jumping on the first scroll.
+   */
+  estimatedHeaderHeight?: number;
+  /**
+   * Lazily mount tab pages as they are visited. Mounted tabs stay mounted so
+   * scroll state is preserved when returning to a tab.
+   */
+  lazy?: boolean;
+  /**
+   * Number of neighboring tabs to mount before they are visited when `lazy` is
+   * enabled. Defaults to 1 so adjacent swipe targets are ready.
+   */
+  lazyPreloadDistance?: number;
   /**
    * How the collapsible header behaves on overscroll (pull-down).
    *
@@ -100,6 +125,7 @@ export interface InternalTabsContextValue {
   /** Per-tab Native gestures wrapping each scroll view. They `requireToFail`
    * the pager pan so the list stays frozen during a horizontal page swipe. */
   listNativeGestures: any[];
+  pullDownBehavior: PullDownBehavior;
 }
 
 export const TabSymbol = Symbol.for('collapsible-fluid-tabs/tab');

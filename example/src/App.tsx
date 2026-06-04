@@ -85,6 +85,7 @@ export default function App() {
             <Tabs.LegendList
               data={AUDIOS}
               recycleItems
+              estimatedItemSize={64}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <Pressable style={styles.audioRow}>
