@@ -47,6 +47,27 @@ body:
       render: shell
     validations:
       required: true
+  - type: dropdown
+    id: reanimated-flags
+    attributes:
+      label: Reanimated staticFeatureFlags
+      description: |
+        Which flags are set in your app's `package.json`? (See the README setup step — this is the most common cause of header sync issues.)
+      options:
+        - The two from the README (ANDROID/IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS)
+        - None
+        - Other or additional flags (list them in the bug summary)
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Platforms affected
+      options:
+        - label: Android
+        - label: iOS
+        - label: Web
   - type: textarea
     id: steps-to-reproduce
     attributes:

@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an addition or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the use case, not just the solution - it may already be possible.
+      placeholder: My designs need an underline-style tab indicator instead of the pill...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behavior
+      description: If you have a shape in mind (a prop, a component, a hook), sketch it.
+      placeholder: |
+        <Tabs.Container snapThreshold={0.5}>
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What are you doing instead today?
+      description: Workarounds you've tried, or other libraries that have this.
+    validations:
+      required: false
