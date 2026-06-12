@@ -1,0 +1,15 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "ignore": {
+    "overrides": [
+      {
+        "files": ["src/App.tsx"],
+        "rules": [
+          // Example tiles are a single uniform shape; getItemType would be a
+          // single constant.
+          "react-doctor/rn-list-recyclable-without-types"
+        ]
+      }
+    ]
+  }
+}

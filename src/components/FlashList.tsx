@@ -5,20 +5,20 @@ import {
   type FlashListProps,
   type FlashListRef,
 } from '@shopify/flash-list';
-import {
-  GestureDetector,
-  VirtualGestureDetector,
-} from 'react-native-gesture-handler';
+import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
 import { FOOTER_GAP } from '../constants';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
 
-// Web uses the standalone host GestureDetector; native uses VirtualGestureDetector
-// under the Container's InterceptingGestureDetector. See Container's IS_WEB note.
-const ListDetector =
-  Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
+// On web the browser scroll view should stay a plain DOM scroller; wrapping it
+// in a Native GestureDetector steals horizontal pointer drags from the pager.
+const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
+// Host detector, NOT VirtualGestureDetector: virtual Native gestures get no
+// touch events on Android, which kills the mid-momentum page swipe. See the
+// listNativeGestures note in Container.tsx.
+const ListDetector = GestureDetector;
 
 // Create the animated component once at module load. `createAnimatedComponent`
 // wraps it so reanimated's UI-thread scroll handler can attach via onScroll,
@@ -112,6 +112,7 @@ function TabsFlashListInner<T>(
   // through `scrollProps`, so we just spread them onto the inner ScrollView.
   const renderScrollComponent = useMemo(
     () =>
+      // eslint-disable-next-line react/no-unstable-nested-components -- identity is stable (memoized on [nativeGesture, listRef]); FlashList's renderScrollComponent API has no way to thread those values through as props from module scope
       function FlashScroll({
         ref: flashScrollRef,
         ...scrollProps
@@ -132,10 +133,12 @@ function TabsFlashListInner<T>(
             (listRef as React.MutableRefObject<unknown>).current = node;
           }
         };
+        const scrollView = <RNScrollView {...scrollProps} ref={setRef} />;
+
+        if (USE_DIRECT_WEB_SCROLL) return scrollView;
+
         return (
-          <ListDetector gesture={nativeGesture}>
-            <RNScrollView {...scrollProps} ref={setRef} />
-          </ListDetector>
+          <ListDetector gesture={nativeGesture}>{scrollView}</ListDetector>
         );
       },
     [nativeGesture, listRef]
@@ -148,6 +151,7 @@ function TabsFlashListInner<T>(
       refreshControl={refreshControl}
       onScroll={scrollHandler}
       scrollEventThrottle={1}
+      overScrollMode={props.overScrollMode ?? 'never'}
       directionalLockEnabled
       nestedScrollEnabled
       showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}

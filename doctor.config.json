@@ -1,0 +1,82 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "ignore": {
+    "rules": [
+      // forwardRef/useContext stay while peer `react` is "*" — forwardRef is
+      // deprecated-but-supported in React 19, and removing it would break
+      // older consumers. Revisit when the peer floor is raised to React 19.
+      "react-doctor/no-react19-deprecated-apis",
+      // False positive: `@legendapp/list` is imported via its
+      // `@legendapp/list/reanimated` subpath (src/components/LegendList.tsx).
+      "deslop/unused-dependency"
+    ],
+    "overrides": [
+      {
+        "files": ["src/components/Container.tsx"],
+        "rules": [
+          // Hook loops are keyed on tab count and the outer Container remounts
+          // ContainerImpl via key={tabs.length}, so hook order is stable for
+          // the lifetime of every mount (documented in the component).
+          "react-doctor/rules-of-hooks",
+          // Header measurement (onLayout -> state with an estimated fallback)
+          // is RN layout plumbing, not derivable during render.
+          "react-doctor/no-derived-state",
+          "react-doctor/no-chain-state-updates",
+          "react-doctor/no-event-handler",
+          // pinnedHeader's `elevation` is Android z-ordering, not a shadow —
+          // converting it to boxShadow would break stacking.
+          "react-doctor/rn-no-legacy-shadow-styles",
+          "react-doctor/rn-style-prefer-boxshadow",
+          // Deps deliberately narrowed: reanimated shared values, animated
+          // refs, and worklet callbacks are stable for a given tabCount.
+          "react-doctor/exhaustive-deps",
+          // renderHeader/renderPinnedHeader/renderTabBar are render props —
+          // the library's public API shape.
+          "react-doctor/no-render-in-render"
+        ]
+      },
+      {
+        "files": [
+          "src/components/FlatList.tsx",
+          "src/components/LegendList.tsx",
+          "src/components/FlashList.tsx",
+          "src/components/ScrollView.tsx"
+        ],
+        "rules": [
+          // Header/footer spacer memos intentionally omit reanimated styles
+          // (stable identity, UI-thread driven) from deps.
+          "react-doctor/exhaustive-deps",
+          // The memoized JSX is used by the early-return (web) path too, so
+          // it is not wasted work on bailout.
+          "react-doctor/rerender-memo-before-early-return",
+          // renderInjected unwraps the user's ListHeader/FooterComponent prop
+          // (component-or-element), mirroring how RN lists consume it.
+          "react-doctor/no-render-in-render",
+          // FlashScroll is memoized on [nativeGesture, listRef]; its identity
+          // is stable per mount. It cannot move to module scope because
+          // FlashList's renderScrollComponent API provides no way to thread
+          // those values through as props.
+          "react-doctor/no-unstable-nested-components"
+        ]
+      },
+      {
+        "files": ["src/components/DefaultTabBar.tsx"],
+        "rules": [
+          // The tab bar maps a handful of tab buttons; virtualizing them
+          // would cost more than it saves.
+          "react-doctor/rn-no-scrollview-mapped-list",
+          // renderIcon unwraps the user's icon prop (node-or-element).
+          "react-doctor/no-render-in-render"
+        ]
+      },
+      {
+        "files": ["example/**"],
+        "rules": [
+          // Example rows are a single uniform shape; getItemType would be a
+          // single constant.
+          "react-doctor/rn-list-recyclable-without-types"
+        ]
+      }
+    ]
+  }
+}

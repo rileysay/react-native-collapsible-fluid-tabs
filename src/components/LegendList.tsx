@@ -2,10 +2,7 @@ import React, { useMemo } from 'react';
 import { Platform } from 'react-native';
 import { AnimatedLegendList } from '@legendapp/list/reanimated';
 import type { LegendListProps } from '@legendapp/list/react-native';
-import {
-  GestureDetector,
-  VirtualGestureDetector,
-} from 'react-native-gesture-handler';
+import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
@@ -15,10 +12,13 @@ import { useTabIndex, useTabsContext } from '../context';
 import { FOOTER_GAP } from '../constants';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
 
-// Web uses the standalone host GestureDetector; native uses VirtualGestureDetector
-// under the Container's InterceptingGestureDetector. See Container's IS_WEB note.
-const ListDetector =
-  Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
+// On web the browser scroll view should stay a plain DOM scroller; wrapping it
+// in a Native GestureDetector steals horizontal pointer drags from the pager.
+const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
+// Host detector, NOT VirtualGestureDetector: virtual Native gestures get no
+// touch events on Android, which kills the mid-momentum page swipe. See the
+// listNativeGestures note in Container.tsx.
+const ListDetector = GestureDetector;
 
 export type TabsLegendListProps<T> = Omit<
   LegendListProps<T>,
@@ -46,7 +46,14 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
   // Legend List exposes a shared scroll offset from its reanimated build. Use
   // that value on every platform so the collapsible header follows the same
   // shared-value path instead of mixing shared values on web with scroll events
-  // on native.
+  // on native. The Container's scroll handler is still attached on native —
+  // not for offsets, but because it carries the onMomentumBegin/End tracking
+  // that arms the pager's momentum grab (relaxed failOffsetY). On web a plain
+  // onScroll only fires at scroll-settle, and the grab is a native-touch
+  // concern anyway, so web skips it.
+  const scrollHandler = USE_DIRECT_WEB_SCROLL
+    ? undefined
+    : ctx.scrollHandlers[index];
   const sharedValues = useMemo(
     () => ({ scrollOffset: pageScrollY }),
     [pageScrollY]
@@ -104,24 +111,27 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
 
   const Component = AnimatedLegendList as unknown as React.ComponentType<any>;
 
-  return (
-    <ListDetector gesture={nativeGesture}>
-      <Component
-        {...(props as LegendListProps<T>)}
-        refScrollView={ref}
-        refreshControl={refreshControl}
-        sharedValues={sharedValues}
-        directionalLockEnabled
-        nestedScrollEnabled
-        showsVerticalScrollIndicator={
-          props.showsVerticalScrollIndicator ?? false
-        }
-        ListHeaderComponent={ListHeaderComponent}
-        ListFooterComponent={ListFooterComponent}
-        contentContainerStyle={contentContainerStyle}
-      />
-    </ListDetector>
+  const list = (
+    <Component
+      {...(props as LegendListProps<T>)}
+      refScrollView={ref}
+      refreshControl={refreshControl}
+      sharedValues={sharedValues}
+      onScroll={scrollHandler}
+      scrollEventThrottle={1}
+      overScrollMode={props.overScrollMode ?? 'never'}
+      directionalLockEnabled
+      nestedScrollEnabled
+      showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
+      ListHeaderComponent={ListHeaderComponent}
+      ListFooterComponent={ListFooterComponent}
+      contentContainerStyle={contentContainerStyle}
+    />
   );
+
+  if (USE_DIRECT_WEB_SCROLL) return list;
+
+  return <ListDetector gesture={nativeGesture}>{list}</ListDetector>;
 }
 
 function renderInjected(node: unknown): React.ReactNode {

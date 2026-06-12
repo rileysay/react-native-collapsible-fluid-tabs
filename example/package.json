@@ -2,6 +2,12 @@
   "name": "react-native-collapsible-fluid-tabs-example",
   "version": "1.0.0",
   "main": "index.js",
+  "reanimated": {
+    "staticFeatureFlags": {
+      "ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS": true,
+      "IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS": true
+    }
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
