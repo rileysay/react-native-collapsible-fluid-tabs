@@ -72,19 +72,9 @@ export default function App() {
 }
 ```
 
-Without them, the collapsing header chases the list through Reanimated's
-commit pipeline, which pauses whenever React commits (list cells mounting
-mid-scroll) — visible as header judder during fast up-and-down drags. With
-them, the header transform is applied in the same frame as the scroll event
-(verified frame-perfect on Android against Reanimated 4.2.1).
-
-Do **not** also enable `DISABLE_COMMIT_PAUSING_MECHANISM` or
-`USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS` (an earlier version of this README
-said to — that was wrong). Removing the commit-pausing guard lets React
-commits race the synchronous updates, and the header/tab bar can freeze at a
-stale position: a permanent gap between the tab bar and content after a
-scroll-to-top, reproducible ~50% of the time. These are compile-time flags —
-changing them requires a native rebuild, not just a JS reload.
+With them, the header transform is applied in the same frame as the scroll
+event; without them it can judder during fast drags. They're compile-time
+flags — they take effect after a native rebuild, not a JS reload.
 
 ---
 
@@ -189,7 +179,7 @@ The only required prop is `children` (your tabs). Everything else is optional �
 |---|---|---|---|
 | `lazy` | `boolean` | `false` | Mount tabs on demand instead of all upfront. |
 | `lazyPreloadDistance` | `number` | `1` | With `lazy`, how many neighboring tabs to pre-mount. |
-| `minPageContentHeight` | `number` | `1.3 × screen height` | Default minimum content height per page. |
+| `minPageContentHeight` | `number` | screen + header height | Minimum content height per page, so short/empty pages can still scroll enough to collapse the header. The default is computed from the measured header. |
 | `containerStyle` | `StyleProp<ViewStyle>` | — | Style for the outermost view. Set a `backgroundColor` — see [Notes](#notes). |
 
 #### Imperative ref

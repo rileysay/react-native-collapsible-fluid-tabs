@@ -26,7 +26,7 @@ export type TabsLegendListProps<T> = Omit<
 > & {
   /**
    * Optional minimum content height. Defaults to the container's
-   * `minPageContentHeight` (1.3x screen height).
+   * `minPageContentHeight` (screen height + measured header height).
    */
   minContentHeight?: number;
 };

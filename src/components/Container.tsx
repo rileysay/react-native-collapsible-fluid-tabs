@@ -213,8 +213,6 @@ function ContainerImpl(props: ContainerImplProps) {
     pullDownBehavior = 'static',
   } = props;
 
-  const resolvedMinContentHeight = minPageContentHeight ?? screenHeight * 1.3;
-
   const tabCount = tabs.length;
   // In controlled mode the `index` prop also decides the first frame.
   const startIndex = controlledIndex ?? initialIndex;
@@ -244,6 +242,17 @@ function ContainerImpl(props: ContainerImplProps) {
   const [measuredHeaderHeight, setMeasuredHeaderHeight] = useState(
     estimatedHeaderHeight
   );
+  // Smallest content that lets any page hold the fully-collapsed chrome:
+  // maxScroll (= content − viewport) must cover the header's collapse range,
+  // or switching here from a collapsed tab pops the chrome open. Derived from
+  // the measured container and header so it's exact for any header size — an
+  // empty page scrolls precisely the collapse distance and no further. The
+  // window height stands in until the container reports its first layout
+  // (oversized, never short — a too-small minimum is the one failure mode).
+  const [measuredContainerHeight, setMeasuredContainerHeight] = useState(0);
+  const resolvedMinContentHeight =
+    minPageContentHeight ??
+    (measuredContainerHeight || screenHeight) + measuredHeaderHeight;
   const resolvedSwipeGestureTopInset =
     swipeGestureTopInset === 'auto'
       ? pinnedTotal + measuredHeaderHeight + tabBarHeight
@@ -971,7 +980,10 @@ function ContainerImpl(props: ContainerImplProps) {
   );
 
   const content = (
-    <View style={[styles.container, containerStyle]}>
+    <View
+      style={[styles.container, containerStyle]}
+      onLayout={(e) => setMeasuredContainerHeight(e.nativeEvent.layout.height)}
+    >
       {renderPinnedHeader ? (
         <View
           // Explicit height when the prop is given; otherwise size to content
