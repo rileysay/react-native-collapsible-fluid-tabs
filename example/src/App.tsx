@@ -246,7 +246,6 @@ export default function App() {
               data={TILES}
               numColumns={3}
               recycleItems
-              estimatedItemSize={120}
               keyExtractor={(item) => item.id}
               renderItem={renderTile}
               refreshControl={makeRefreshControl()}

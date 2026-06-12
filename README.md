@@ -43,22 +43,8 @@ This library uses the **Gesture Handler v3** hook API and **Reanimated 4**:
 
 ### Setup
 
-**1. Wrap your app** in `GestureHandlerRootView` and `SafeAreaProvider`:
-
-```tsx
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-
-export default function App() {
-  return (
-    <SafeAreaProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        {/* ... */}
-      </GestureHandlerRootView>
-    </SafeAreaProvider>
-  );
-}
-```
+**1.** Make sure your app is wrapped in `GestureHandlerRootView` and
+`SafeAreaProvider` — Expo Router apps have both out of the box.
 
 **2. Enable Reanimated's synchronous UI-prop updates** in your app's
 `package.json` — and **only** these two flags:
@@ -311,7 +297,7 @@ For lower-level access, `useTabsContext()` (inside a `Container`) and `useTabInd
 Runs under `react-native-web`. A couple of things help:
 
 - **Header tracking.** `Tabs.LegendList` tracks the collapsing header via Legend List's continuous `scrollOffset` (a plain `onScroll` only fires at scroll-settle on web). The other lists use native scroll and need nothing.
-- **Lists with images.** On `Tabs.LegendList`, set `estimatedItemSize` (no separate UI thread on web, so accurate sizing keeps virtualization from starving the animation). On recycled `expo-image`s, set `recyclingKey` so they don't flash the previous image and `draggable={false}` so the browser's image-drag doesn't swallow swipes.
+- **Lists with images.** Legend List sizes items from a running average after the first render, so `estimatedItemSize` is optional — passing it still improves the first paint on web, where layout corrections run on the single thread mid-animation. On recycled `expo-image`s, set `recyclingKey` so they don't flash the previous image and `draggable={false}` so the browser's image-drag doesn't swallow swipes.
 
 ---
 
