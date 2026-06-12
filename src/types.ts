@@ -100,6 +100,13 @@ export interface ContainerProps {
    */
   swipeGestureTopInset?: SwipeGestureTopInset;
   springConfig?: SpringConfig;
+  /**
+   * Minimum content height per page, so short or empty pages can still
+   * scroll far enough to hold the fully-collapsed chrome. Defaults to the
+   * measured container height plus the measured header height — exactly the
+   * collapse range, no scrolling past it. Per-list `minContentHeight`
+   * overrides it for one page.
+   */
   minPageContentHeight?: number;
   /**
    * Optional first-frame estimate for the collapsible header height. The real
