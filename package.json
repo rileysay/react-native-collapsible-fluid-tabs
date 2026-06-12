@@ -1,6 +1,6 @@
 {
   "name": "react-native-collapsible-fluid-tabs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Smooth collapsible header and tabs for React Native, with synchronized scroll across pages",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -44,8 +44,14 @@
     "ios",
     "android",
     "tabs",
+    "tab-view",
     "collapsible",
+    "collapsible-tab-view",
     "header",
+    "sticky-header",
+    "profile",
+    "pager",
+    "swipe",
     "scroll",
     "reanimated",
     "expo"
