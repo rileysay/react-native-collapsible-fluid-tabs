@@ -109,14 +109,6 @@ const DEFAULT_SPRING: Required<NonNullable<ContainerProps['springConfig']>> = {
 // pages animates a little longer instead of snapping at the same speed.
 const SNAP_DURATION_BASE = 250;
 const SNAP_DURATION_PER_PAGE = 50;
-
-// Scroll-to-top settle guard: how long after issuing the animated scroll to
-// re-check the offset (covers the platform animation, ~250-400ms), and how
-// far from 0 (dp) still counts as a truncated landing worth snapping. Beyond
-// the tolerance the user has plainly scrolled away on purpose — leave it.
-const SCROLL_TOP_SETTLE_CHECK_MS = 650;
-const SCROLL_TOP_SETTLE_TOLERANCE = 24;
-
 function addMountedTabs(
   mounted: Set<number>,
   centerIndex: number,
@@ -855,28 +847,9 @@ function ContainerImpl(props: ContainerImplProps) {
       };
       if (Platform.OS === 'web') {
         scrollTop();
-        return;
+      } else {
+        runOnUISync(scrollTop);
       }
-      runOnUISync(scrollTop);
-      // A React commit landing in the animation's last frames can override
-      // its final writes (reproduced with DISABLE_COMMIT_PAUSING_MECHANISM),
-      // parking the list a frame short of 0 — the header rests visibly shy
-      // of fully expanded. Re-check after the animation and snap the
-      // remainder; the snap is a one-frame correction of at most the
-      // tolerance, so it reads as the animation completing.
-      setTimeout(() => {
-        const settle = () => {
-          'worklet';
-          const i = clampTabIndex(activeIndex.value, tabCount);
-          const ref = listRefs[i];
-          const y = perPageScrollY[i];
-          if (!ref || !y) return;
-          if (y.value > 0 && y.value <= SCROLL_TOP_SETTLE_TOLERANCE) {
-            scrollToMountedRef(ref, 0, 0, false);
-          }
-        };
-        runOnUISync(settle);
-      }, SCROLL_TOP_SETTLE_CHECK_MS);
     },
     // listRefs / perPageScrollY entries are stable for a given tabCount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
