@@ -19,9 +19,15 @@ export function extractTabs(children: ReactNode): ExtractedTab[] {
     const type = child.type as { $$typeofTab?: symbol } | undefined;
     if (!type || type.$$typeofTab !== TabSymbol) return;
     const tabElement = child as ReactElement<TabProps>;
-    const { name, icon, label, children: tabChildren } = tabElement.props;
+    const {
+      name,
+      icon,
+      label,
+      badge,
+      children: tabChildren,
+    } = tabElement.props;
     result.push({
-      config: { name, icon, label },
+      config: { name, icon, label, badge },
       children: tabChildren,
       key: name,
     });

@@ -5,6 +5,7 @@ A collapsible header + swipeable tabs for React Native, with a fluid pill tab ba
 - 📉 **Collapsing header** — hides as you scroll, reveals as you pull down
 - 📌 **Optional pinned header** — a status-bar-aware bar that floats on top
 - 👆 **Gesture-driven pager** — horizontal swipe between tabs, no `react-native-pager-view`
+- ⚡ **Momentum grab** — touch a flinging list to stop it and page sideways in the same gesture, like the X app
 - 🔄 **Synced scroll** — pages keep their scroll position, so tabs don't jump on swipe
 - 💊 **Fluid pill tab bar** — tracks fractional swipe progress; goes scrollable when tabs get crowded
 - 📜 **Drop-in lists** — `FlatList`, `ScrollView`, `LegendList`, and `FlashList`
@@ -59,18 +60,31 @@ export default function App() {
 }
 ```
 
-**2. Enable the Reanimated 4 commit flags** in your app's `package.json` — without them, cross-page scroll sync can flicker on swipe:
+**2. Enable Reanimated's synchronous UI-prop updates** in your app's
+`package.json` — and **only** these two flags:
 
 ```json
 "reanimated": {
   "staticFeatureFlags": {
-    "DISABLE_COMMIT_PAUSING_MECHANISM": true,
-    "USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS": true,
     "ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS": true,
     "IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS": true
   }
 }
 ```
+
+Without them, the collapsing header chases the list through Reanimated's
+commit pipeline, which pauses whenever React commits (list cells mounting
+mid-scroll) — visible as header judder during fast up-and-down drags. With
+them, the header transform is applied in the same frame as the scroll event
+(verified frame-perfect on Android against Reanimated 4.2.1).
+
+Do **not** also enable `DISABLE_COMMIT_PAUSING_MECHANISM` or
+`USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS` (an earlier version of this README
+said to — that was wrong). Removing the commit-pausing guard lets React
+commits race the synchronous updates, and the header/tab bar can freeze at a
+stale position: a permanent gap between the tab bar and content after a
+scroll-to-top, reproducible ~50% of the time. These are compile-time flags —
+changing them requires a native rebuild, not just a JS reload.
 
 ---
 
@@ -140,18 +154,21 @@ The only required prop is `children` (your tabs). Everything else is optional �
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `renderHeader` | `() => ReactNode` | — | The collapsing header. Its measured height drives the collapse. |
-| `renderPinnedHeader` | `() => ReactNode` | — | Optional header pinned to the top, always visible. |
-| `pinnedHeaderHeight` | `number` | `0` | Height of the pinned header (the safe-area top inset is added for you). |
+| `renderHeader` | `(props: HeaderRenderProps) => ReactNode` | — | The collapsing header. Its measured height drives the collapse. Receives `{ scrollY, headerHeight, topInset, pinnedHeaderHeight }` for header-internal animations. |
+| `renderPinnedHeader` | `(props: HeaderRenderProps) => ReactNode` | — | Optional header pinned to the top, always visible. Same render props. |
+| `pinnedHeaderHeight` | `number` | auto | Height of the pinned header, excluding the safe-area top inset (added for you). Omit it to auto-measure the rendered pinned header — give it intrinsic height (padding, not `flex: 1`). Passing a height just avoids a first-frame adjustment. |
+| `estimatedHeaderHeight` | `number` | `0` | First-frame estimate for the collapsing header height, so list spacers don't start at 0 and jump after the first layout. The measured height always wins. |
 
 **Tabs & navigation**
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `children` | `ReactNode` | — | One or more `<Tabs.Tab>`. Changing the *number* of tabs remounts the pager — see [Notes](#notes). |
-| `tabBarHeight` | `number` | `56` | Height of the tab bar. |
-| `initialIndex` | `number` | `0` | Tab to start on. |
+| `tabBarHeight` | `number` | `56` | Height of the tab bar (matches the default bar; set it to match a custom one). |
+| `initialIndex` | `number` | `0` | Tab to start on (uncontrolled mode). |
+| `index` | `number` | — | Controlled active tab: when it changes the pager animates there. Pair it with `onIndexChange` and commit reported changes back to your state. Omit for uncontrolled mode. |
 | `onIndexChange` | `(index: number) => void` | — | Fires after a tab change (tap or swipe). |
+| `scrollToTopOnTabPress` | `boolean` | `true` | Tapping the already-active tab scrolls its list back to the top, like X. |
 | `renderTabBar` | `(props) => ReactNode` | `Tabs.DefaultTabBar` | Render your own tab bar. |
 
 **Swipe & motion**
@@ -159,10 +176,12 @@ The only required prop is `children` (your tabs). Everything else is optional �
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `swipeEnabled` | `boolean` | `true` | Enable horizontal swipe between tabs. |
-| `swipeActivationDistance` | `number` | `15` | Horizontal travel (px) before a swipe activates. |
-| `swipeFailDistance` | `number` | `10` | Vertical travel (px) that cancels a swipe in favor of scrolling. |
+| `swipeActivationDistance` | `number` | `15` | Horizontal travel (dp) before a swipe activates. |
+| `swipeFailDistance` | `number` | `10` | Vertical travel (dp) that cancels a swipe in favor of scrolling. |
+| `momentumSwipeFailDistance` | `number` | `40` | Replaces `swipeFailDistance` while the list is momentum-scrolling (and for the touch that grabs it). A finger catching a moving list drifts vertically far more than one starting at rest — the relaxed threshold is what makes mid-momentum page swipes land. |
+| `swipeGestureTopInset` | `'auto' \| number` | `'auto'` | Top area where the pager swipe won't activate. `'auto'` excludes the header chrome so touches there keep behaving like scroll/refresh gestures; pass `0` to allow swipes from the full page height. |
 | `springConfig` | `SpringConfig` | `damping 30, stiffness 200` | Spring used to settle the pager after a swipe. |
-| `pullDownBehavior` | `'stretch' \| 'static'` | `'static'` | Overscroll: `'static'` keeps the header put while the list bounces; `'stretch'` stretches the header with the pull. |
+| `pullDownBehavior` | `'stretch' \| 'static'` | `'static'` | Pull-down at the top: `'static'` keeps the chrome put with the native refresh spinner between header and list. `'stretch'` pulls the whole page down — collapsible header and tab bar ride along, pinned header stays — revealing the refresh indicator near the top. On iOS stretch rides the native bounce; on Android (no native bounce) the Container drives the pull itself and shows a built-in indicator, still wired to your `refreshControl`'s `refreshing`/`onRefresh`. |
 
 **Performance & layout**
 
@@ -175,7 +194,7 @@ The only required prop is `children` (your tabs). Everything else is optional �
 
 #### Imperative ref
 
-Drive the active tab from outside — deep links, a "next" button, etc.:
+Drive the active tab from outside — deep links, a "next" button, etc. (If you'd rather own the tab in state, use the controlled `index` prop instead; the ref suits one-off jumps.)
 
 ```tsx
 import { useRef } from 'react';
@@ -202,6 +221,7 @@ const index = tabsRef.current?.getIndex();
 | `name` | `string` | Stable identifier (used as the key). |
 | `label` | `string` | Optional label for the default tab bar. |
 | `icon` | `ReactNode` | Optional icon for the default tab bar. Any node — an `<Image>`, an SVG, a vector-icon. |
+| `badge` | `string \| number \| boolean` | Optional badge: a string/number renders a count bubble, `true` a small dot. Custom tab bars receive it on `TabConfig`. |
 | `children` | `ReactNode` | The tab's content — typically one of the list components. |
 
 `icon` is just a React node, so image icons work out of the box (the default bar clones it with `tintColor`/`color`, which template/vector icons can pick up):
@@ -239,7 +259,7 @@ It's **adaptive**: equal-width pills when tabs fit, and a horizontally scrollabl
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `colors` | `DefaultTabBarColors` | — | `background`, `pillBackground`, `trackBackground`, `iconTint`, `labelColor`. |
+| `colors` | `DefaultTabBarColors` | — | `background`, `pillBackground`, `trackBackground`, `iconTint`, `labelColor`, `badgeBackground`, `badgeText`. |
 | `scrollable` | `'auto' \| boolean` | `'auto'` | `'auto'` chooses equal-width vs. scrollable; `true`/`false` force it. |
 | `minTabWidth` | `number` | `88` | In `'auto'`, switch to scrollable once equal tabs would be narrower than this. |
 | `sidePadding` | `number` | `16` | Horizontal padding around the pill. |
@@ -289,7 +309,8 @@ For lower-level access, `useTabsContext()` (inside a `Container`) and `useTabInd
 
 - **Changing the tab count** remounts the pager (it's keyed on tab count), resetting per-tab scroll and returning to `initialIndex`. Keep the count stable where you can; hide content per-tab instead of adding/removing tabs.
 - **Set a background.** During an overscroll bounce a brief sliver can open between the header and list. Set `containerStyle={{ backgroundColor: '…' }}` to your theme background so the OS window background (e.g. black in dark mode) doesn't show through.
-- **RefreshControl on Android.** Import `RefreshControl` from **`react-native-gesture-handler`**, not `react-native`. Inside the pager each list is wrapped in a Native gesture; RN's RefreshControl doesn't participate, so pull-to-refresh would only commit on a second touch. The gesture-aware one auto-wires the relation and gets a `progressViewOffset` so the spinner clears the header. (iOS needs neither.)
+- **RefreshControl on Android.** Import `RefreshControl` from **`react-native-gesture-handler`**, not `react-native`. Inside the pager each list is wrapped in a Native gesture; RN's RefreshControl doesn't participate, so pull-to-refresh would only commit on a second touch. In `'static'` mode the gesture-aware control auto-wires that relation and gets a `progressViewOffset` placing the spinner below the header chrome (pass your own to override). In `'stretch'` mode the native spinner is suppressed entirely — the Container drives the pull and shows its built-in indicator, still wired to your control's `refreshing`/`onRefresh`. (iOS needs neither.)
+- **Android overscroll is off by default.** Every list wrapper sets `overScrollMode="never"`: Android's overscroll stretch effect moves the list's pixels without emitting scroll events, so the overlaid header can't follow and a visible seam opens between chrome and content. Pass your own `overScrollMode` to re-enable it.
 - **Reduced motion.** With the OS "reduce motion" setting on, tab changes jump instantly instead of springing.
 - **RTL.** The pager forces LTR internally so swipe math stays correct; tab *order* isn't mirrored.
 

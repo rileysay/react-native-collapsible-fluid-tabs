@@ -1,5 +1,6 @@
 import React, { useRef, useState, type ReactNode } from 'react';
 import {
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -7,6 +8,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import {
+  GestureDetector,
   VirtualGestureDetector,
   useTapGesture,
 } from 'react-native-gesture-handler';
@@ -36,6 +38,10 @@ export interface DefaultTabBarColors {
   iconTint?: string;
   /** Color used for label text. */
   labelColor?: string;
+  /** Background of the tab badge bubble/dot. */
+  badgeBackground?: string;
+  /** Color of the badge count text. */
+  badgeText?: string;
 }
 
 export interface DefaultTabBarProps extends TabBarRenderProps {
@@ -63,6 +69,8 @@ const DEFAULT_COLORS: Required<DefaultTabBarColors> = {
   pillBackground: '#ffffff',
   iconTint: '#1c1c1e',
   labelColor: '#1c1c1e',
+  badgeBackground: '#ff3b30',
+  badgeText: '#ffffff',
 };
 
 // Inner padding of the pill track (px). The moving pill is offset by this and
@@ -74,6 +82,8 @@ const PILL_PADDING = 3;
 // moves TAB_FADE_DISTANCE (in fractional pages) away from that tab.
 const TAB_INACTIVE_OPACITY = 0.4;
 const TAB_FADE_DISTANCE = 0.5;
+const TabGestureDetector =
+  Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
 
 export function DefaultTabBar(props: DefaultTabBarProps) {
   const {
@@ -180,7 +190,7 @@ interface BarProps {
   containerWidth: number;
 }
 
-/** Equal-width pill bar — the original behavior, unchanged. */
+/** Equal-width pill bar, used when all tabs fit at `minTabWidth` or wider. */
 function FitBar({
   tabs,
   pagerOffset,
@@ -225,6 +235,8 @@ function FitBar({
           pagerOffset={pagerOffset}
           iconTint={c.iconTint}
           labelColor={c.labelColor}
+          badgeBackground={c.badgeBackground}
+          badgeText={c.badgeText}
           selected={index === selectedIndex}
           onPress={() => onTabPress(index)}
         />
@@ -309,6 +321,8 @@ function ScrollableBar({
           pagerOffset={pagerOffset}
           iconTint={c.iconTint}
           labelColor={c.labelColor}
+          badgeBackground={c.badgeBackground}
+          badgeText={c.badgeText}
           selected={index === selectedIndex}
           onPress={() => onTabPress(index)}
           onMeasure={setLayout}
@@ -324,6 +338,8 @@ interface TabButtonProps {
   pagerOffset: DerivedValue<number> | SharedValue<number>;
   iconTint: string;
   labelColor: string;
+  badgeBackground: string;
+  badgeText: string;
   selected: boolean;
   onPress: () => void;
   /** When provided, the button reports its layout and uses content width. */
@@ -336,6 +352,8 @@ function TabButton({
   pagerOffset,
   iconTint,
   labelColor,
+  badgeBackground,
+  badgeText,
   selected,
   onPress,
   onMeasure,
@@ -372,7 +390,7 @@ function TabButton({
     : undefined;
 
   return (
-    <VirtualGestureDetector gesture={tap}>
+    <TabGestureDetector gesture={tap}>
       <View
         style={onMeasure ? styles.tabButtonScroll : styles.tabButton}
         onLayout={handleLayout}
@@ -390,9 +408,24 @@ function TabButton({
               {tab.label}
             </Text>
           ) : null}
+          {tab.badge != null && tab.badge !== false ? (
+            tab.badge === true ? (
+              <View
+                style={[styles.badgeDot, { backgroundColor: badgeBackground }]}
+              />
+            ) : (
+              <View
+                style={[styles.badge, { backgroundColor: badgeBackground }]}
+              >
+                <Text style={[styles.badgeLabel, { color: badgeText }]}>
+                  {String(tab.badge)}
+                </Text>
+              </View>
+            )
+          ) : null}
         </Animated.View>
       </View>
-    </VirtualGestureDetector>
+    </TabGestureDetector>
   );
 }
 
@@ -435,10 +468,9 @@ const styles = StyleSheet.create({
     bottom: PILL_PADDING,
     left: 0,
     borderRadius: 100,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    // CSS box shadow (new-architecture RN + react-native-web) renders on both
+    // platforms — the old shadow* keys were iOS-only, leaving Android flat.
+    boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
   },
   tabButton: {
     flex: 1,
@@ -458,5 +490,22 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  badge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  badgeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });
