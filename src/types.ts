@@ -21,6 +21,14 @@ export interface TabConfig {
 export interface TabBarRenderProps {
   tabs: TabConfig[];
   scrollY: SharedValue<number>;
+  /** Per-tab scroll offsets — tab bar motion must read the active page's value
+   *  (same as the collapsing header) rather than the mirrored `scrollY`. */
+  perPageScrollY: SharedValue<number>[];
+  /** Active during same-tab scroll-to-top so header chrome can follow the
+   * UI-thread driven target instead of waiting on native scroll events. */
+  scrollToTopIndex?: SharedValue<number>;
+  scrollToTopOffset?: SharedValue<number>;
+  tabCount: number;
   headerHeight: SharedValue<number>;
   activeIndex: SharedValue<number>;
   pagerOffset: DerivedValue<number>;
@@ -158,20 +166,25 @@ export interface InternalTabsContextValue {
   scrollY: SharedValue<number>;
   headerHeight: SharedValue<number>;
   activeIndex: SharedValue<number>;
+  momentumActive: SharedValue<boolean>;
   pagerOffset: DerivedValue<number>;
   pillWidth: SharedValue<number>;
   pinnedHeaderHeight: number;
+  headerHeightValue: number;
   tabBarHeight: number;
   topInset: number;
   bottomInset: number;
   minPageContentHeight: number;
   listRefs: AnimatedRef<any>[];
   perPageScrollY: SharedValue<number>[];
+  scrollToTopIndex: SharedValue<number>;
+  scrollToTopOffset: SharedValue<number>;
   scrollHandlers: any[];
   /** Per-tab Native gestures wrapping each scroll view. They `requireToFail`
    * the pager pan so the list stays frozen during a horizontal page swipe. */
   listNativeGestures: any[];
   pullDownBehavior: PullDownBehavior;
+  usesCustomPullSV: SharedValue<boolean>;
   /**
    * True when the Container drives pull-to-refresh itself (Android `stretch`
    * mode): the native SwipeRefreshLayout is suppressed and the wrappers

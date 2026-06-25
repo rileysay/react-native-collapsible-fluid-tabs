@@ -2,8 +2,6 @@ import { memo, useCallback, useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import {
   GestureHandlerRootView,
-  // Gesture-aware RefreshControl — RN's own RefreshControl needs a second
-  // touch to commit inside the pager's gesture detector on Android.
   RefreshControl,
 } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,30 +10,29 @@ import {
   type PullDownBehavior,
 } from 'react-native-collapsible-fluid-tabs';
 
-// One tab per list wrapper, named after it, so every integration the library
-// ships is exercised: FlatList / LegendList / FlashList / ScrollView. The
-// pager runs in controlled mode (`index` + `onIndexChange`), the pinned bar
-// height is auto-measured (no pinnedHeaderHeight prop), tab badges are shown,
-// and pullDownBehavior / swipeEnabled are live toggles. Tapping the active
-// tab again scrolls its list back to the top (on by default).
+// One tab per list wrapper so every integration ships: FlatList, LegendList,
+// ScrollView, FlashList. Controlled mode, live pull/swipe toggles, badges,
+// auto-measured pinned header, and scroll-to-top on re-tap.
 
-const POSTS = Array.from({ length: 30 }, (_, i) => ({
-  id: `p${i}`,
-  title: `Post ${i + 1}`,
-  body: 'Exploring new ideas and sharing them with the world. Building things that matter.',
-}));
+const TILE_COLORS = [
+  '#ef4444',
+  '#f97316',
+  '#f59e0b',
+  '#22c55e',
+  '#14b8a6',
+  '#0ea5e9',
+  '#6366f1',
+  '#a855f7',
+  '#ec4899',
+];
 
 const TILES = Array.from({ length: 60 }, (_, i) => ({
-  id: `t${i}`,
+  id: String(i),
   n: i + 1,
-  color: `hsl(${(i * 37) % 360}, 60%, 70%)`,
+  color: TILE_COLORS[i % TILE_COLORS.length]!,
 }));
 
-const TAB_NAMES = ['flatlist', 'legendlist', 'flashlist', 'scrollview'];
-
-// ---------------------------------------------------------------------------
-// Collapsible + pinned headers
-// ---------------------------------------------------------------------------
+const TAB_NAMES = ['feed', 'grid', 'about', 'flash'];
 
 function ProfileHeader() {
   return (
@@ -118,29 +115,21 @@ function ControlButton({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Row components (module scope + memo so list rows don't rebuild per render)
-// ---------------------------------------------------------------------------
-
-const PostCard = memo(function PostCard({ post }: { post: (typeof POSTS)[0] }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{post.title}</Text>
-      <Text style={styles.cardBody}>{post.body}</Text>
-    </View>
-  );
-});
-
-const HueTile = memo(function HueTile({
-  color,
-  n,
+const Tile = memo(function Tile({
+  tile,
+  variant = 'grid',
 }: {
-  color: string;
-  n: number;
+  tile: (typeof TILES)[0];
+  variant?: 'grid' | 'row';
 }) {
   return (
-    <View style={[styles.tile, { backgroundColor: color }]}>
-      <Text style={styles.tileLabel}>{n}</Text>
+    <View
+      style={[
+        variant === 'row' ? styles.tileRow : styles.tileWrap,
+        { backgroundColor: tile.color },
+      ]}
+    >
+      <Text style={styles.tileLabel}>{tile.n}</Text>
     </View>
   );
 });
@@ -148,7 +137,7 @@ const HueTile = memo(function HueTile({
 function ScrollViewContent() {
   return (
     <View style={styles.about}>
-      <Text style={styles.cardTitle}>ScrollView tab</Text>
+      <Text style={styles.cardTitle}>About (ScrollView tab)</Text>
       <Text style={styles.cardBody}>
         This tab uses Tabs.ScrollView instead of a list. Scroll it to confirm
         the collapsible header collapses here too, and that swiping back keeps
@@ -167,15 +156,7 @@ function ScrollViewContent() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
-
 export default function App() {
-  // Controlled mode: this state owns the active tab. Swipes and tab taps
-  // report through onIndexChange and we commit them back; the jump buttons
-  // just set state. (Uncontrolled mode — initialIndex + the imperative ref —
-  // works too; see the README.)
   const [activeIndex, setActiveIndex] = useState(0);
   const [pullDown, setPullDown] = useState<PullDownBehavior>('static');
   const [swipeEnabled, setSwipeEnabled] = useState(true);
@@ -186,20 +167,18 @@ export default function App() {
     setTimeout(() => setRefreshing(false), 1500);
   }, []);
 
-  // Each list needs its own element instance (the library clones it to inject
-  // the Android progressViewOffset and gesture relation).
   const makeRefreshControl = useCallback(
     () => <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />,
     [refreshing, onRefresh]
   );
 
-  const renderPost = useCallback(
-    ({ item }: { item: (typeof POSTS)[0] }) => <PostCard post={item} />,
+  const renderGridTile = useCallback(
+    ({ item }: { item: (typeof TILES)[0] }) => <Tile tile={item} />,
     []
   );
-  const renderTile = useCallback(
+  const renderRowTile = useCallback(
     ({ item }: { item: (typeof TILES)[0] }) => (
-      <HueTile color={item.color} n={item.n} />
+      <Tile tile={item} variant="row" />
     ),
     []
   );
@@ -223,49 +202,48 @@ export default function App() {
               onToggleSwipe={() => setSwipeEnabled((s) => !s)}
             />
           )}
-          // No pinnedHeaderHeight: the pinned bar's height is auto-measured.
           tabBarHeight={56}
+          estimatedHeaderHeight={250}
           index={activeIndex}
           onIndexChange={setActiveIndex}
           pullDownBehavior={pullDown}
           swipeEnabled={swipeEnabled}
           containerStyle={styles.container}
         >
-          <Tabs.Tab name="flatlist" label="FlatList">
+          <Tabs.Tab name="feed" label="Feed">
             <Tabs.FlatList
-              data={POSTS}
+              data={TILES}
               keyExtractor={(item) => item.id}
-              renderItem={renderPost}
+              renderItem={renderRowTile}
               refreshControl={makeRefreshControl()}
-              contentContainerStyle={styles.listContent}
             />
           </Tabs.Tab>
 
-          <Tabs.Tab name="legendlist" label="LegendList">
+          <Tabs.Tab name="grid" label="Grid">
             <Tabs.LegendList
               data={TILES}
               numColumns={3}
               recycleItems
+              getItemType={() => 'tile'}
               keyExtractor={(item) => item.id}
-              renderItem={renderTile}
+              renderItem={renderGridTile}
               refreshControl={makeRefreshControl()}
             />
           </Tabs.Tab>
 
-          <Tabs.Tab name="flashlist" label="FlashList" badge={3}>
-            <Tabs.FlashList
-              data={POSTS}
-              keyExtractor={(item) => `f-${item.id}`}
-              renderItem={renderPost}
-              refreshControl={makeRefreshControl()}
-              contentContainerStyle={styles.listContent}
-            />
-          </Tabs.Tab>
-
-          <Tabs.Tab name="scrollview" label="ScrollView" badge>
+          <Tabs.Tab name="about" label="About">
             <Tabs.ScrollView refreshControl={makeRefreshControl()}>
               <ScrollViewContent />
             </Tabs.ScrollView>
+          </Tabs.Tab>
+
+          <Tabs.Tab name="flash" label="Flash" badge={3}>
+            <Tabs.FlashList
+              data={TILES}
+              keyExtractor={(item) => `f-${item.id}`}
+              renderItem={renderRowTile}
+              refreshControl={makeRefreshControl()}
+            />
           </Tabs.Tab>
         </Tabs.Container>
       </GestureHandlerRootView>
@@ -275,7 +253,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  container: { backgroundColor: '#f2f2f7' },
+  container: { backgroundColor: '#ffffff' },
   header: {
     alignItems: 'center',
     paddingVertical: 24,
@@ -295,8 +273,6 @@ const styles = StyleSheet.create({
   stat: { alignItems: 'center', gap: 2 },
   statValue: { fontSize: 16, fontWeight: '700', color: '#1c1c1e' },
   statLabel: { fontSize: 12, color: '#8e8e93' },
-  // No fixed height — the container auto-measures the pinned bar, so it must
-  // size itself from its content (padding, not flex).
   pinned: {
     backgroundColor: '#ffffff',
     gap: 6,
@@ -313,6 +289,7 @@ const styles = StyleSheet.create({
   },
   controlRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 6,
   },
@@ -324,24 +301,20 @@ const styles = StyleSheet.create({
   },
   btnPressed: { opacity: 0.6 },
   btnText: { color: '#ffffff', fontSize: 12, fontWeight: '600' },
-  listContent: { paddingHorizontal: 12, gap: 10 },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
+  tileWrap: { flex: 1 / 3, aspectRatio: 1, margin: 1 },
+  tileRow: { width: '100%', aspectRatio: 1, marginBottom: 1 },
+  tileLabel: {
+    position: 'absolute',
+    bottom: 4,
+    right: 6,
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 3,
   },
   cardTitle: { fontSize: 17, fontWeight: '600', color: '#1c1c1e' },
   cardBody: { marginTop: 6, fontSize: 15, lineHeight: 21, color: '#3c3c43' },
-  tile: {
-    flex: 1,
-    aspectRatio: 1,
-    margin: 2,
-    borderRadius: 8,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-    padding: 6,
-  },
-  tileLabel: { color: '#ffffff', fontWeight: '700', fontSize: 12 },
   about: { padding: 20, gap: 8 },
   aboutBlock: { gap: 4, marginTop: 8 },
 });

@@ -25,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { getHeaderScrollOffset } from '../utils/paging';
 import type { TabBarRenderProps, TabConfig } from '../types';
 
 export interface DefaultTabBarColors {
@@ -89,6 +90,10 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   const {
     tabs,
     scrollY,
+    perPageScrollY,
+    scrollToTopIndex,
+    scrollToTopOffset,
+    tabCount,
     headerHeight,
     activeIndex,
     pagerOffset,
@@ -109,6 +114,11 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   const topOffset = pinnedHeaderHeight + topInset;
   const stretch = pullDownBehavior === 'stretch';
   const containerWidth = screenWidth - sidePadding * 2;
+  const fallbackScrollToTopIndex = useSharedValue(-1);
+  const fallbackScrollToTopOffset = useSharedValue(0);
+  const headerScrollToTopIndex = scrollToTopIndex ?? fallbackScrollToTopIndex;
+  const headerScrollToTopOffset =
+    scrollToTopOffset ?? fallbackScrollToTopOffset;
 
   // 'auto': equal-width pill when tabs fit; scrollable content-width pill when
   // equal slices would be narrower than minTabWidth. true/false force the mode.
@@ -119,25 +129,35 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
 
   // Mirror the active page into JS state so each tab can report its
   // accessibilityState. Only fires on whole-page changes, not per frame.
-  const [selectedIndex, setSelectedIndex] = useState(() =>
-    Math.round(activeIndex.value)
-  );
+  const [selectedIndex, setSelectedIndex] = useState(0);
   useAnimatedReaction(
-    () => Math.round(activeIndex.value),
+    () => {
+      'worklet';
+      return Math.round(activeIndex.value);
+    },
     (curr, prev) => {
+      'worklet';
       if (curr !== prev) scheduleOnRN(setSelectedIndex, curr);
     }
   );
 
   const wrapStyle = useAnimatedStyle(() => {
     'worklet';
+    const offset = getHeaderScrollOffset(
+      activeIndex.value,
+      tabCount,
+      perPageScrollY,
+      scrollY,
+      headerScrollToTopIndex.value,
+      headerScrollToTopOffset.value
+    );
     const translateY =
-      scrollY.value < 0
+      offset < 0
         ? stretch
-          ? headerHeight.value + Math.abs(scrollY.value)
+          ? headerHeight.value + Math.abs(offset)
           : headerHeight.value
         : interpolate(
-            scrollY.value,
+            offset,
             [0, headerHeight.value],
             [headerHeight.value, 0],
             Extrapolation.CLAMP
@@ -290,8 +310,12 @@ function ScrollableBar({
 
   // Keep the active tab centred as it changes (tap or swipe settle).
   useAnimatedReaction(
-    () => Math.round(activeIndex.value),
+    () => {
+      'worklet';
+      return Math.round(activeIndex.value);
+    },
     (i) => {
+      'worklet';
       const layouts = tabLayouts.value;
       if (layouts.length < tabs.length) return;
       const tab = layouts[Math.max(0, Math.min(i, tabs.length - 1))]!;
@@ -359,6 +383,7 @@ function TabButton({
   onMeasure,
 }: TabButtonProps) {
   const animStyle = useAnimatedStyle(() => {
+    'worklet';
     const distance = Math.abs(pagerOffset.value - index);
     const opacity =
       distance < TAB_FADE_DISTANCE

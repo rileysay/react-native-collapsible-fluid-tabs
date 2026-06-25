@@ -43,27 +43,37 @@ export function useAutoRefreshControl(
 ): RefreshControlElement | undefined {
   const ctx = useTabsContext();
   const index = useTabIndex();
+  const {
+    usesCustomPull,
+    reportRefreshConfig,
+    headerHeight,
+    pinnedHeaderHeight,
+    topInset,
+    tabBarHeight,
+  } = ctx;
 
   const isAndroid = Platform.OS === 'android';
-  const usesCustomPull = ctx.usesCustomPull;
   const hasControl = !!refreshControl;
   const refreshing = !!refreshControl?.props.refreshing;
   const onRefresh = refreshControl?.props.onRefresh;
 
   // Android stretch mode: hand the refresh config to the Container's custom
-  // pull. Runs every render so `refreshing` stays fresh; cheap (ref write).
+  // pull. Runs whenever the control config changes; cheap (ref write).
   useEffect(() => {
     if (!usesCustomPull) return;
-    ctx.reportRefreshConfig(
-      index,
-      hasControl ? { refreshing, onRefresh } : null
-    );
-  });
+    reportRefreshConfig(index, hasControl ? { refreshing, onRefresh } : null);
+  }, [
+    hasControl,
+    index,
+    onRefresh,
+    refreshing,
+    reportRefreshConfig,
+    usesCustomPull,
+  ]);
   useEffect(() => {
     if (!usesCustomPull) return;
-    return () => ctx.reportRefreshConfig(index, null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, usesCustomPull]);
+    return () => reportRefreshConfig(index, null);
+  }, [index, reportRefreshConfig, usesCustomPull]);
 
   const needsOffset =
     hasControl &&
@@ -75,8 +85,12 @@ export function useAutoRefreshControl(
 
   const [headerH, setHeaderH] = useState(0);
   useAnimatedReaction(
-    () => (needsOffset ? ctx.headerHeight.value : 0),
+    () => {
+      'worklet';
+      return needsOffset ? headerHeight.value : 0;
+    },
     (v, prev) => {
+      'worklet';
       if (v !== prev) scheduleOnRN(setHeaderH, v);
     }
   );
@@ -90,7 +104,7 @@ export function useAutoRefreshControl(
   const injected: Record<string, unknown> = {};
   if (needsOffset) {
     injected.progressViewOffset =
-      ctx.pinnedHeaderHeight + ctx.topInset + headerH + ctx.tabBarHeight;
+      pinnedHeaderHeight + topInset + headerH + tabBarHeight;
   }
   if (needsBlock) {
     injected.block = nativeGesture;

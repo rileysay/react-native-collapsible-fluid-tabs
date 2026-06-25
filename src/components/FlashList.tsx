@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+﻿import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { Platform, ScrollView as RNScrollView } from 'react-native';
 import {
   FlashList as ShopifyFlashList,
@@ -41,20 +41,31 @@ function TabsFlashListInner<T>(
 ) {
   const ctx = useTabsContext();
   const index = useTabIndex();
+  const {
+    listRefs,
+    listNativeGestures,
+    scrollHandlers,
+    headerHeight,
+    pinnedHeaderHeight,
+    topInset,
+    tabBarHeight,
+    bottomInset,
+    minPageContentHeight,
+  } = ctx;
 
   const flashRef = useRef<FlashListRef<T>>(null);
-  const nativeGesture = ctx.listNativeGestures[index];
+  const nativeGesture = listNativeGestures[index];
   // The Container's shared animated ref for this page. `syncLists` / `scrollTo`
   // drive it to align every page to the collapsed scroll offset on tab change.
   // The other list wrappers bind it to their scroller; we attach it to the real
   // scroll view inside `renderScrollComponent` below so FlashList participates
   // in sync too (otherwise switching to this tab shows the un-scrolled header
   // spacer as a blank gap until the first touch).
-  const listRef = ctx.listRefs[index];
+  const listRef = listRefs[index];
   // Reuse the same UI-thread scrollHandler the Container created for every
   // tab. Driving scrollY on the UI thread (not via a JS onScroll callback) is
   // what keeps the collapsing header glued to the list under heavy scroll.
-  const scrollHandler = ctx.scrollHandlers[index];
+  const scrollHandler = scrollHandlers[index];
   const refreshControl = useAutoRefreshControl(
     props.refreshControl,
     nativeGesture
@@ -63,15 +74,11 @@ function TabsFlashListInner<T>(
   useImperativeHandle(forwardedRef, () => flashRef.current!, []);
 
   const headerSpacerStyle = useAnimatedStyle(() => ({
-    height:
-      ctx.headerHeight.value +
-      ctx.pinnedHeaderHeight +
-      ctx.topInset +
-      ctx.tabBarHeight,
+    height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
   }));
 
   const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: ctx.tabBarHeight + ctx.bottomInset + FOOTER_GAP,
+    height: tabBarHeight + bottomInset + FOOTER_GAP,
   }));
 
   const userListHeader = props.ListHeaderComponent;
@@ -99,7 +106,7 @@ function TabsFlashListInner<T>(
     [userListFooter]
   );
 
-  const minHeight = props.minContentHeight ?? ctx.minPageContentHeight;
+  const minHeight = props.minContentHeight ?? minPageContentHeight;
   const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
 
   // FlashList v2 nests its real scroll view inside an outer flex wrapper View,
@@ -107,7 +114,7 @@ function TabsFlashListInner<T>(
   // gesture to that non-scrolling wrapper (the scroll gesture then only
   // registered in a sliver of the tab). Instead, inject the gesture at the
   // actual scroller via `renderScrollComponent` so the ScrollView is the
-  // detector's *direct child* — matching how the RN FlatList/ScrollView/
+  // detector's *direct child* ΓÇö matching how the RN FlatList/ScrollView/
   // LegendList wrappers attach it. FlashList forwards its ref + onScroll
   // through `scrollProps`, so we just spread them onto the inner ScrollView.
   const renderScrollComponent = useMemo(

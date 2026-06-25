@@ -32,10 +32,21 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
   function TabsScrollViewInner(props, forwardedRef) {
     const ctx = useTabsContext();
     const index = useTabIndex();
+    const {
+      listRefs,
+      scrollHandlers,
+      listNativeGestures,
+      headerHeight,
+      pinnedHeaderHeight,
+      topInset,
+      tabBarHeight,
+      bottomInset,
+      minPageContentHeight,
+    } = ctx;
 
-    const ref = ctx.listRefs[index] as React.Ref<RNScrollView>;
-    const scrollHandler = ctx.scrollHandlers[index];
-    const nativeGesture = ctx.listNativeGestures[index];
+    const ref = listRefs[index] as React.Ref<RNScrollView>;
+    const scrollHandler = scrollHandlers[index];
+    const nativeGesture = listNativeGestures[index];
     const refreshControl = useAutoRefreshControl(
       props.refreshControl,
       nativeGesture
@@ -48,18 +59,14 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
     );
 
     const headerSpacerStyle = useAnimatedStyle(() => ({
-      height:
-        ctx.headerHeight.value +
-        ctx.pinnedHeaderHeight +
-        ctx.topInset +
-        ctx.tabBarHeight,
+      height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
     }));
 
     const footerSpacerStyle = useAnimatedStyle(() => ({
-      height: ctx.tabBarHeight + ctx.bottomInset + FOOTER_GAP,
+      height: tabBarHeight + bottomInset + FOOTER_GAP,
     }));
 
-    const minHeight = props.minContentHeight ?? ctx.minPageContentHeight;
+    const minHeight = props.minContentHeight ?? minPageContentHeight;
 
     const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
 

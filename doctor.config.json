@@ -8,7 +8,10 @@
       "react-doctor/no-react19-deprecated-apis",
       // False positive: `@legendapp/list` is imported via its
       // `@legendapp/list/reanimated` subpath (src/components/LegendList.tsx).
-      "deslop/unused-dependency"
+      "deslop/unused-dependency",
+      // False positive: `turbo` is used from GitHub Actions for cached
+      // Android/iOS native build checks, outside React Doctor's scan scope.
+      "deslop/unused-dev-dependency"
     ],
     "overrides": [
       {
@@ -30,6 +33,9 @@
           // Deps deliberately narrowed: reanimated shared values, animated
           // refs, and worklet callbacks are stable for a given tabCount.
           "react-doctor/exhaustive-deps",
+          // Controlled `index` prop sync calls goToIndex(..., notify=false),
+          // so it does not echo onIndexChange back to the parent.
+          "react-doctor/no-pass-data-to-parent",
           // renderHeader/renderPinnedHeader/renderTabBar are render props —
           // the library's public API shape.
           "react-doctor/no-render-in-render"
@@ -52,6 +58,10 @@
           // renderInjected unwraps the user's ListHeader/FooterComponent prop
           // (component-or-element), mirroring how RN lists consume it.
           "react-doctor/no-render-in-render",
+          // LegendList's native bridge registers a Reanimated event handler
+          // with animatedRef.observe; this is native event subscription
+          // plumbing, not data being passed back to a React parent.
+          "react-doctor/no-pass-data-to-parent",
           // FlashScroll is memoized on [nativeGesture, listRef]; its identity
           // is stable per mount. It cannot move to module scope because
           // FlashList's renderScrollComponent API provides no way to thread

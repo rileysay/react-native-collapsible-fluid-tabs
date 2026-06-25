@@ -5,6 +5,7 @@ import {
 } from 'react-native-reanimated';
 
 import { useTabsContext } from './context';
+import { getHeaderScrollOffset } from './utils/paging';
 
 export interface CollapsibleHeader {
   /** Active page's scroll position (shared value). */
@@ -33,23 +34,41 @@ export interface CollapsibleHeader {
  * reaching into the raw internal context. Call inside a `<Tabs.Container>`.
  */
 export function useCollapsibleHeader(): CollapsibleHeader {
-  const ctx = useTabsContext();
+  const {
+    scrollY,
+    headerHeight,
+    activeIndex,
+    perPageScrollY,
+    scrollToTopIndex,
+    scrollToTopOffset,
+    pinnedHeaderHeight,
+    tabBarHeight,
+    topInset,
+  } = useTabsContext();
 
   const collapseProgress = useDerivedValue(() => {
     'worklet';
-    const h = ctx.headerHeight.value;
+    const h = headerHeight.value;
     if (h <= 0) return 0;
-    const p = ctx.scrollY.value / h;
+    const offset = getHeaderScrollOffset(
+      activeIndex.value,
+      perPageScrollY.length,
+      perPageScrollY,
+      scrollY,
+      scrollToTopIndex.value,
+      scrollToTopOffset.value
+    );
+    const p = offset / h;
     return p < 0 ? 0 : p > 1 ? 1 : p;
   });
 
   return {
-    scrollY: ctx.scrollY,
-    headerHeight: ctx.headerHeight,
+    scrollY,
+    headerHeight,
     collapseProgress,
-    pinnedHeaderHeight: ctx.pinnedHeaderHeight,
-    tabBarHeight: ctx.tabBarHeight,
-    topInset: ctx.topInset,
-    contentTop: ctx.pinnedHeaderHeight + ctx.topInset + ctx.tabBarHeight,
+    pinnedHeaderHeight,
+    tabBarHeight,
+    topInset,
+    contentTop: pinnedHeaderHeight + topInset + tabBarHeight,
   };
 }

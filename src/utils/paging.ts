@@ -61,3 +61,48 @@ export function collapseTranslateY(
   if (scrollY < 0) return stretch ? -scrollY : 0;
   return -Math.min(scrollY, headerHeight);
 }
+
+type ScrollOffsetFallback = number | { value: number };
+
+function readFallbackScrollOffset(fallbackScrollY: ScrollOffsetFallback) {
+  'worklet';
+  return typeof fallbackScrollY === 'number'
+    ? fallbackScrollY
+    : fallbackScrollY.value;
+}
+
+/** Active tab scroll offset for header / pull UI. Prefer the per-page shared
+ *  value (LegendList writes here via `sharedValues.scrollOffset` /
+ *  `useScrollViewOffset`) over the mirrored `scrollY`, which can lag by a
+ *  reaction frame and make the header look jelly/out of sync. */
+export function getActiveScrollOffset(
+  activeIndex: number,
+  tabCount: number,
+  perPageScrollY: readonly { value: number }[],
+  fallbackScrollY: ScrollOffsetFallback
+): number {
+  'worklet';
+  if (tabCount <= 0) return readFallbackScrollOffset(fallbackScrollY);
+  const i = Math.max(0, Math.min(activeIndex, tabCount - 1));
+  const pageY = perPageScrollY[i];
+  return pageY ? pageY.value : readFallbackScrollOffset(fallbackScrollY);
+}
+
+/** Header-visible scroll offset. During a programmatic scroll-to-top animation
+ *  the native list may emit scroll events unevenly, so header chrome reads the
+ *  UI-thread-driven programmatic offset until the list lands at 0. */
+export function getHeaderScrollOffset(
+  activeIndex: number,
+  tabCount: number,
+  perPageScrollY: readonly { value: number }[],
+  fallbackScrollY: ScrollOffsetFallback,
+  scrollToTopIndex: number,
+  scrollToTopOffset: number
+): number {
+  'worklet';
+  if (tabCount <= 0) return readFallbackScrollOffset(fallbackScrollY);
+  const i = Math.max(0, Math.min(activeIndex, tabCount - 1));
+  if (scrollToTopIndex === i) return scrollToTopOffset;
+  const pageY = perPageScrollY[i];
+  return pageY ? pageY.value : readFallbackScrollOffset(fallbackScrollY);
+}
