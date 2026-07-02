@@ -2,6 +2,10 @@
 
 A collapsible header + swipeable tabs for React Native, with a fluid pill tab bar and scroll positions that stay in sync across pages.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rileysay/react-native-collapsible-fluid-tabs/main/docs/demo.gif" width="300" alt="Collapsing header, tab swipe and tap, and pull-to-refresh started from the tab bar" />
+</p>
+
 - 📉 **Collapsing header** — hides as you scroll, reveals as you pull down
 - 📌 **Optional pinned header** — a status-bar-aware bar that floats on top
 - 👆 **Gesture-driven pager** — horizontal swipe between tabs, no `react-native-pager-view`
