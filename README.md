@@ -28,6 +28,13 @@ Install the peer dependencies (see [version requirements](#version-requirements)
 npm install react-native-reanimated react-native-gesture-handler react-native-safe-area-context react-native-worklets
 ```
 
+`Tabs.LegendList` and `Tabs.FlashList` need their list package installed too — they're optional peers, so nothing ships in your app unless you use them:
+
+```sh
+npm install @legendapp/list        # for Tabs.LegendList
+npm install @shopify/flash-list    # for Tabs.FlashList
+```
+
 > **iOS:** the list backends include native code, so run `npx pod-install` after installing.
 
 ### Version requirements
@@ -40,6 +47,8 @@ This library targets **Gesture Handler 3** and **Reanimated 4.4+** (tested with 
 | `react-native-reanimated` | `>= 4.4.0` |
 | `react-native-worklets` | `>= 0.9.1` |
 | `react-native-safe-area-context` | `>= 4.0.0` |
+| `@legendapp/list` (optional) | `>= 3.2.0` |
+| `@shopify/flash-list` (optional) | `>= 2.0.0` |
 
 ### Setup
 
@@ -108,7 +117,7 @@ Every list is a drop-in for its underlying component and automatically gets head
 | `Tabs.FlashList` | Only if you already standardize on Shopify FlashList | ✅ |
 | `Tabs.FlatList` | Legacy — still exported, but LegendList is faster and smoother here | ✅ |
 
-`@legendapp/list` ships as a dependency, so **`Tabs.LegendList` works out of the box** — no extra install. `@shopify/flash-list` is bundled too if you need `Tabs.FlashList`.
+`Tabs.ScrollView` and `Tabs.FlatList` work with zero extra installs. `Tabs.LegendList` and `Tabs.FlashList` need their (optional-peer) list package — see [Installation](#installation).
 
 Each list manages a few props for you (`onScroll`, `scrollEventThrottle`, the scroll `ref`) and adds one extra:
 

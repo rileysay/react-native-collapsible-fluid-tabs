@@ -1,4 +1,9 @@
-import { collapseTranslateY, resolveSnapIndex, rubberBand } from '../paging';
+import {
+  collapseTranslateY,
+  getHeaderScrollOffset,
+  resolveSnapIndex,
+  rubberBand,
+} from '../paging';
 
 const PAGE = 300;
 
@@ -69,5 +74,39 @@ describe('collapseTranslateY', () => {
 
   it('pushes the header down on overscroll when stretching', () => {
     expect(collapseTranslateY(-80, 200, true)).toBe(80);
+  });
+});
+
+describe('getHeaderScrollOffset', () => {
+  const pages = (...values: number[]) => values.map((value) => ({ value }));
+
+  it('returns the active page offset in normal scrolling', () => {
+    expect(getHeaderScrollOffset(1, 3, pages(10, 120, 0), 120, -1, 0)).toBe(
+      120
+    );
+  });
+
+  it('returns the programmatic offset during scroll-to-top on the active tab', () => {
+    expect(getHeaderScrollOffset(1, 3, pages(10, 120, 0), 120, 1, 42)).toBe(42);
+  });
+
+  it('ignores scroll-to-top running on another tab', () => {
+    expect(getHeaderScrollOffset(0, 3, pages(10, 120, 0), 10, 1, 42)).toBe(10);
+  });
+
+  it('prefers a negative fallback while the page rests at the top (custom pull)', () => {
+    expect(getHeaderScrollOffset(0, 3, pages(0, 0, 0), -56, -1, 0)).toBe(-56);
+  });
+
+  it('prefers a negative fallback when the page rests at a fractional offset', () => {
+    expect(getHeaderScrollOffset(0, 3, pages(0.4, 0, 0), -56, -1, 0)).toBe(-56);
+  });
+
+  it('does not let a negative fallback mask a genuinely scrolled page', () => {
+    expect(getHeaderScrollOffset(0, 3, pages(80, 0, 0), -56, -1, 0)).toBe(80);
+  });
+
+  it('clamps the active index into range', () => {
+    expect(getHeaderScrollOffset(5, 3, pages(0, 0, 90), 90, -1, 0)).toBe(90);
   });
 });

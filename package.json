@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "react-native-collapsible-fluid-tabs",
   "version": "1.0.3",
   "description": "Smooth collapsible header and tabs for React Native, with synchronized scroll across pages",
@@ -76,6 +76,7 @@
     "@legendapp/list": "^3.2.0",
     "@react-native/babel-preset": "0.85.0",
     "@react-native/eslint-config": "0.85.0",
+    "@shopify/flash-list": "2.3.1",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.2.0",
     "babel-jest": "^30.4.1",
@@ -97,12 +98,22 @@
     "typescript": "^6.0.2"
   },
   "peerDependencies": {
+    "@legendapp/list": ">=3.2.0",
+    "@shopify/flash-list": ">=2.0.0",
     "react": "*",
     "react-native": "*",
     "react-native-gesture-handler": ">=3.0.0",
     "react-native-reanimated": ">=4.4.0",
     "react-native-safe-area-context": ">=4.0.0",
     "react-native-worklets": ">=0.9.1"
+  },
+  "peerDependenciesMeta": {
+    "@legendapp/list": {
+      "optional": true
+    },
+    "@shopify/flash-list": {
+      "optional": true
+    }
   },
   "workspaces": [
     "example"
@@ -142,8 +153,6 @@
     "version": "0.62.0"
   },
   "dependencies": {
-    "@babel/runtime": "^7.29.7",
-    "@legendapp/list": "^3.2.0",
-    "@shopify/flash-list": "2.3.1"
+    "@babel/runtime": "^7.29.7"
   }
 }

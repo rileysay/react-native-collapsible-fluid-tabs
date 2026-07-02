@@ -62,9 +62,9 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
       height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
     }));
 
-    const footerSpacerStyle = useAnimatedStyle(() => ({
-      height: tabBarHeight + bottomInset + FOOTER_GAP,
-    }));
+    // Static per layout (no shared values), so a plain View — an animated
+    // style here would register a do-nothing Reanimated mapper per page.
+    const footerSpacerHeight = tabBarHeight + bottomInset + FOOTER_GAP;
 
     const minHeight = props.minContentHeight ?? minPageContentHeight;
 
@@ -90,7 +90,7 @@ export const ScrollView = forwardRef<RNScrollView, TabsScrollViewProps>(
       >
         <Animated.View style={headerSpacerStyle} />
         <View>{props.children}</View>
-        <Animated.View style={footerSpacerStyle} />
+        <View style={{ height: footerSpacerHeight }} />
       </AnimatedScrollView>
     );
 

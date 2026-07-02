@@ -18,6 +18,8 @@
     "build:web": "expo export --platform web"
   },
   "dependencies": {
+    "@legendapp/list": "^3.2.0",
+    "@shopify/flash-list": "2.3.1",
     "expo": "~56.0.0",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",

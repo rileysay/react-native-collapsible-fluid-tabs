@@ -71,26 +71,13 @@ function readFallbackScrollOffset(fallbackScrollY: ScrollOffsetFallback) {
     : fallbackScrollY.value;
 }
 
-/** Active tab scroll offset for header / pull UI. Prefer the per-page shared
- *  value (LegendList writes here via `sharedValues.scrollOffset` /
- *  `useScrollViewOffset`) over the mirrored `scrollY`, which can lag by a
- *  reaction frame and make the header look jelly/out of sync. */
-export function getActiveScrollOffset(
-  activeIndex: number,
-  tabCount: number,
-  perPageScrollY: readonly { value: number }[],
-  fallbackScrollY: ScrollOffsetFallback
-): number {
-  'worklet';
-  if (tabCount <= 0) return readFallbackScrollOffset(fallbackScrollY);
-  const i = Math.max(0, Math.min(activeIndex, tabCount - 1));
-  const pageY = perPageScrollY[i];
-  return pageY ? pageY.value : readFallbackScrollOffset(fallbackScrollY);
-}
-
 /** Header-visible scroll offset. During a programmatic scroll-to-top animation
  *  the native list may emit scroll events unevenly, so header chrome reads the
- *  UI-thread-driven programmatic offset until the list lands at 0. */
+ *  UI-thread-driven programmatic offset until the list lands at 0.
+ *
+ *  On Android `stretch`, pull-to-refresh is driven synthetically via the
+ *  mirrored `scrollY` while the native list stays at offset 0 — prefer that
+ *  negative fallback over the per-page value so the chrome rides the pull. */
 export function getHeaderScrollOffset(
   activeIndex: number,
   tabCount: number,
@@ -103,6 +90,12 @@ export function getHeaderScrollOffset(
   if (tabCount <= 0) return readFallbackScrollOffset(fallbackScrollY);
   const i = Math.max(0, Math.min(activeIndex, tabCount - 1));
   if (scrollToTopIndex === i) return scrollToTopOffset;
+  const fallback = readFallbackScrollOffset(fallbackScrollY);
   const pageY = perPageScrollY[i];
-  return pageY ? pageY.value : readFallbackScrollOffset(fallbackScrollY);
+  const pageOffset = pageY ? pageY.value : fallback;
+  // `<= 1` matches the custom pull's own at-top checks (enable + preserve
+  // guards): lists can rest at fractional offsets, which must not mask the
+  // negative pull.
+  if (fallback < 0 && pageOffset <= 1) return fallback;
+  return pageOffset;
 }

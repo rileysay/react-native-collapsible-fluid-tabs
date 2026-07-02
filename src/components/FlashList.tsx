@@ -1,10 +1,6 @@
 ﻿import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
-import { Platform, ScrollView as RNScrollView } from 'react-native';
-import {
-  FlashList as ShopifyFlashList,
-  type FlashListProps,
-  type FlashListRef,
-} from '@shopify/flash-list';
+import { Platform, ScrollView as RNScrollView, View } from 'react-native';
+import type { FlashListProps, FlashListRef } from '@shopify/flash-list';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
@@ -20,13 +16,23 @@ const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
 // listNativeGestures note in Container.tsx.
 const ListDetector = GestureDetector;
 
-// Create the animated component once at module load. `createAnimatedComponent`
-// wraps it so reanimated's UI-thread scroll handler can attach via onScroll,
-// matching the FlatList/ScrollView/LegendList path. Doing this per-render
-// would recreate the class every render.
-const AnimatedFlashList = Animated.createAnimatedComponent(
-  ShopifyFlashList as unknown as React.ComponentType<any>
-) as unknown as React.ComponentType<any>;
+// @shopify/flash-list is an optional peer: the require lives in a try/catch so
+// Metro treats it as an optional dependency (`allowOptionalDependencies`, on
+// by default in Expo / RN CLI configs) and consumers without it installed can
+// still import the library. Only rendering Tabs.FlashList requires it.
+//
+// The animated component is created once at module load. It wraps FlashList so
+// reanimated's UI-thread scroll handler can attach via onScroll, matching the
+// FlatList/ScrollView/LegendList path. Doing this per-render would recreate
+// the class every render.
+let AnimatedFlashList: React.ComponentType<any> | null = null;
+try {
+  AnimatedFlashList = Animated.createAnimatedComponent(
+    require('@shopify/flash-list').FlashList as React.ComponentType<any>
+  ) as unknown as React.ComponentType<any>;
+} catch {
+  // Left null; Tabs.FlashList throws a descriptive error when rendered.
+}
 
 export type TabsFlashListProps<T> = Omit<
   FlashListProps<T>,
@@ -39,6 +45,12 @@ function TabsFlashListInner<T>(
   props: TabsFlashListProps<T>,
   forwardedRef: React.Ref<FlashListRef<T>>
 ) {
+  if (!AnimatedFlashList) {
+    throw new Error(
+      '[collapsible-fluid-tabs] Tabs.FlashList requires the optional peer dependency @shopify/flash-list. Install it with: npm install @shopify/flash-list'
+    );
+  }
+  const FlashListComponent = AnimatedFlashList;
   const ctx = useTabsContext();
   const index = useTabIndex();
   const {
@@ -77,9 +89,9 @@ function TabsFlashListInner<T>(
     height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
   }));
 
-  const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: tabBarHeight + bottomInset + FOOTER_GAP,
-  }));
+  // Static per layout (no shared values), so a plain View — an animated
+  // style here would register a do-nothing Reanimated mapper per page.
+  const footerSpacerHeight = tabBarHeight + bottomInset + FOOTER_GAP;
 
   const userListHeader = props.ListHeaderComponent;
   const userListFooter = props.ListFooterComponent;
@@ -99,11 +111,10 @@ function TabsFlashListInner<T>(
     () => (
       <>
         {renderInjected(userListFooter)}
-        <Animated.View style={footerSpacerStyle} />
+        <View style={{ height: footerSpacerHeight }} />
       </>
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userListFooter]
+    [userListFooter, footerSpacerHeight]
   );
 
   const minHeight = props.minContentHeight ?? minPageContentHeight;
@@ -114,7 +125,7 @@ function TabsFlashListInner<T>(
   // gesture to that non-scrolling wrapper (the scroll gesture then only
   // registered in a sliver of the tab). Instead, inject the gesture at the
   // actual scroller via `renderScrollComponent` so the ScrollView is the
-  // detector's *direct child* ΓÇö matching how the RN FlatList/ScrollView/
+  // detector's *direct child* — matching how the RN FlatList/ScrollView/
   // LegendList wrappers attach it. FlashList forwards its ref + onScroll
   // through `scrollProps`, so we just spread them onto the inner ScrollView.
   const renderScrollComponent = useMemo(
@@ -152,7 +163,7 @@ function TabsFlashListInner<T>(
   );
 
   return (
-    <AnimatedFlashList
+    <FlashListComponent
       {...(props as FlashListProps<T>)}
       ref={flashRef}
       refreshControl={refreshControl}

@@ -6,6 +6,7 @@ import React, {
 } from 'react';
 import {
   Platform,
+  View,
   type FlatListProps,
   type FlatList as RNFlatList,
 } from 'react-native';
@@ -94,9 +95,9 @@ function TabsFlatListInner<T>(
     height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
   }));
 
-  const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: tabBarHeight + bottomInset + FOOTER_GAP,
-  }));
+  // Static per layout (no shared values), so a plain View — an animated
+  // style here would register a do-nothing Reanimated mapper per page.
+  const footerSpacerHeight = tabBarHeight + bottomInset + FOOTER_GAP;
 
   const userListHeader = props.ListHeaderComponent;
   const userListFooter = props.ListFooterComponent;
@@ -116,10 +117,10 @@ function TabsFlatListInner<T>(
     () => (
       <>
         {renderInjected(userListFooter)}
-        <Animated.View style={footerSpacerStyle} />
+        <View style={{ height: footerSpacerHeight }} />
       </>
     ),
-    [userListFooter, footerSpacerStyle]
+    [userListFooter, footerSpacerHeight]
   );
 
   const minHeight = props.minContentHeight ?? minPageContentHeight;

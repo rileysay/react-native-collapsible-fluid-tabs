@@ -346,14 +346,18 @@ function usePagerListState({
   const syncLists = useCallback(
     (excludeIndex: number = -1) => {
       'worklet';
+      // Clamp: a negative scrollY is overscroll (custom pull / iOS bounce),
+      // not a real list position — parking pages at it would leave a stuck
+      // pulled-down state on arrival (the list emits no events until touched).
+      const sourceY = Math.max(0, scrollY.value);
       for (let i = 0; i < listRefs.length; i++) {
         if (i === excludeIndex) continue;
         const ref = listRefs[i];
         const y = perPageScrollY[i];
         if (!ref || !y) continue;
         const target =
-          scrollY.value < headerHeight.value
-            ? scrollY.value
+          sourceY < headerHeight.value
+            ? sourceY
             : y.value < headerHeight.value
               ? headerHeight.value
               : null;
@@ -496,6 +500,14 @@ function usePagerGestures({
       isPanning.value = true;
       startX.value = translateX.value;
       cancelScrollToTop();
+      // A horizontal swipe instantly dismisses the custom pull's indicator
+      // (the X behavior — the refresh itself keeps running; landing on a
+      // new page also clears the hold via handleIndexChange). Gated to the
+      // custom pull: on iOS a negative scrollY is a real bounce offset.
+      if (usesCustomPullSV.value && scrollY.value < 0) {
+        cancelAnimation(scrollY);
+        scrollY.value = 0;
+      }
       freezeLists();
       syncLists(activeIndex.value);
     },
@@ -822,7 +834,7 @@ function ContainerContentBase({
         </Animated.View>
       ) : null}
 
-      {IS_ANDROID ? (
+      {IS_ANDROID && pullDownBehavior === 'stretch' ? (
         <Animated.View
           style={[
             styles.pullIndicator,
@@ -975,7 +987,9 @@ function useTabNavigation({
     (currentIndex: number, nextIndex: number) => {
       const prepare = () => {
         'worklet';
-        const sourceY = scrollY.value;
+        // Clamped for the same reason as syncLists: never propagate a
+        // synthetic negative pull offset into the pages' scroll state.
+        const sourceY = Math.max(0, scrollY.value);
         const collapseRange = headerHeight.value;
 
         for (let i = 0; i < listRefs.length; i++) {
@@ -1494,7 +1508,11 @@ function ContainerImpl(props: ContainerImplProps) {
   const handleIndexChange = useCallback(
     (index: number, notifyParent: boolean = true) => {
       mountTabsAround(index);
-      refreshingHold.value = !!refreshConfigs.current[index]?.refreshing;
+      // Switching tabs dismisses the pull-to-refresh hold outright, even if
+      // the landing tab reports `refreshing` — its data keeps loading, just
+      // without the indicator (the X/Instagram behavior, and what iOS's
+      // native RefreshControl does by default).
+      refreshingHold.value = false;
       if (notifyParent) onIndexChange?.(index);
     },
     [mountTabsAround, onIndexChange, refreshingHold]

@@ -9809,6 +9809,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "react-native-collapsible-fluid-tabs-example@workspace:example"
   dependencies:
+    "@legendapp/list": "npm:^3.2.0"
+    "@shopify/flash-list": "npm:2.3.1"
     expo: "npm:~56.0.0"
     expo-status-bar: "npm:~56.0.4"
     react: "npm:19.2.3"
@@ -9856,12 +9858,19 @@ __metadata:
     turbo: "npm:^2.8.21"
     typescript: "npm:^6.0.2"
   peerDependencies:
+    "@legendapp/list": ">=3.2.0"
+    "@shopify/flash-list": ">=2.0.0"
     react: "*"
     react-native: "*"
     react-native-gesture-handler: ">=3.0.0"
     react-native-reanimated: ">=4.4.0"
     react-native-safe-area-context: ">=4.0.0"
     react-native-worklets: ">=0.9.1"
+  peerDependenciesMeta:
+    "@legendapp/list":
+      optional: true
+    "@shopify/flash-list":
+      optional: true
   languageName: unknown
   linkType: soft
 

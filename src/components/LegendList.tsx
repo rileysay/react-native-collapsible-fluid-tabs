@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Platform } from 'react-native';
-import { AnimatedLegendList } from '@legendapp/list/reanimated';
+import { Platform, View } from 'react-native';
 import type { LegendListProps } from '@legendapp/list/react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -32,6 +31,17 @@ const LEGEND_LIST_SCROLL_EVENT_NAMES = [
 // listNativeGestures note in Container.tsx.
 const ListDetector = GestureDetector;
 
+// @legendapp/list is an optional peer: the require lives in a try/catch so
+// Metro treats it as an optional dependency (`allowOptionalDependencies`, on
+// by default in Expo / RN CLI configs) and consumers without it installed can
+// still import the library. Only rendering Tabs.LegendList requires it.
+let AnimatedLegendList: React.ComponentType<any> | null = null;
+try {
+  AnimatedLegendList = require('@legendapp/list/reanimated').AnimatedLegendList;
+} catch {
+  // Left null; Tabs.LegendList throws a descriptive error when rendered.
+}
+
 export type TabsLegendListProps<T> = Omit<
   LegendListProps<T>,
   'onScroll' | 'scrollEventThrottle' | 'refScrollView'
@@ -44,6 +54,11 @@ export type TabsLegendListProps<T> = Omit<
 };
 
 export function LegendList<T>(props: TabsLegendListProps<T>) {
+  if (!AnimatedLegendList) {
+    throw new Error(
+      '[collapsible-fluid-tabs] Tabs.LegendList requires the optional peer dependency @legendapp/list. Install it with: npm install @legendapp/list'
+    );
+  }
   const ctx = useTabsContext();
   const index = useTabIndex();
   const {
@@ -91,9 +106,9 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
     height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
   }));
 
-  const footerSpacerStyle = useAnimatedStyle(() => ({
-    height: tabBarHeight + bottomInset + FOOTER_GAP,
-  }));
+  // Static per layout (no shared values), so a plain View — an animated
+  // style here would register a do-nothing Reanimated mapper per page.
+  const footerSpacerHeight = tabBarHeight + bottomInset + FOOTER_GAP;
 
   const userListHeader = props.ListHeaderComponent;
   const userListFooter = props.ListFooterComponent;
@@ -113,11 +128,10 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
     () => (
       <>
         {renderInjected(userListFooter)}
-        <Animated.View style={footerSpacerStyle} />
+        <View style={{ height: footerSpacerHeight }} />
       </>
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userListFooter]
+    [userListFooter, footerSpacerHeight]
   );
 
   const minHeight = props.minContentHeight ?? minPageContentHeight;
