@@ -1,4 +1,4 @@
-import React, { useRef, useState, type ReactNode } from 'react';
+import React, { useContext, useRef, useState, type ReactNode } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -25,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { TabsContext } from '../context';
 import { getHeaderScrollOffset } from '../utils/paging';
 import type { TabBarRenderProps, TabConfig } from '../types';
 
@@ -110,6 +111,10 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   } = props;
 
   const { width: screenWidth } = useWindowDimensions();
+  // Nullable on purpose: the default bar can be rendered through a custom
+  // renderTabBar wrapper, but the pull relation only exists inside a
+  // Tabs.Container.
+  const pullPanGesture = useContext(TabsContext)?.pullPanGesture;
   const c = { ...DEFAULT_COLORS, ...(colors ?? {}) };
   const topOffset = pinnedHeaderHeight + topInset;
   const stretch = pullDownBehavior === 'stretch';
@@ -173,6 +178,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     selectedIndex,
     onTabPress,
     colors: c,
+    pullPanGesture,
   };
 
   return (
@@ -208,6 +214,7 @@ interface BarProps {
   onTabPress: (index: number) => void;
   colors: Required<DefaultTabBarColors>;
   containerWidth: number;
+  pullPanGesture?: object;
 }
 
 /** Equal-width pill bar, used when all tabs fit at `minTabWidth` or wider. */
@@ -219,6 +226,7 @@ function FitBar({
   colors: c,
   containerWidth,
   pillWidth,
+  pullPanGesture,
 }: BarProps & { pillWidth: SharedValue<number> }) {
   const pillStyle = useAnimatedStyle(() => {
     'worklet';
@@ -259,6 +267,7 @@ function FitBar({
           badgeText={c.badgeText}
           selected={index === selectedIndex}
           onPress={() => onTabPress(index)}
+          pullPanGesture={pullPanGesture}
         />
       ))}
     </View>
@@ -274,6 +283,7 @@ function ScrollableBar({
   onTabPress,
   colors: c,
   containerWidth,
+  pullPanGesture,
 }: BarProps) {
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   // Measured { x, width } for each tab, in content coordinates — drives the
@@ -350,6 +360,7 @@ function ScrollableBar({
           selected={index === selectedIndex}
           onPress={() => onTabPress(index)}
           onMeasure={setLayout}
+          pullPanGesture={pullPanGesture}
         />
       ))}
     </Animated.ScrollView>
@@ -368,6 +379,7 @@ interface TabButtonProps {
   onPress: () => void;
   /** When provided, the button reports its layout and uses content width. */
   onMeasure?: (index: number, x: number, width: number) => void;
+  pullPanGesture?: object;
 }
 
 function TabButton({
@@ -381,6 +393,7 @@ function TabButton({
   selected,
   onPress,
   onMeasure,
+  pullPanGesture,
 }: TabButtonProps) {
   const animStyle = useAnimatedStyle(() => {
     'worklet';
@@ -401,7 +414,11 @@ function TabButton({
   // system alongside the pager pan. Mixing RN touch handlers with RNGH leaves
   // the touch responder stuck after some gestures (taps stop registering until
   // another gesture resets it). A Tap's onActivate fires only on a valid tap.
+  // simultaneousWith the pull pan: the pull activates below the touch slop
+  // (see PULL_ACTIVATION), so without the relation a tap drifting a few dp
+  // downward would be cancelled by the pull activating.
   const tap = useTapGesture({
+    simultaneousWith: pullPanGesture ? [pullPanGesture as never] : undefined,
     onActivate: () => {
       scheduleOnRN(onPress);
     },

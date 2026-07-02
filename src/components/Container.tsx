@@ -22,7 +22,6 @@ import {
   useCompetingGestures,
   useNativeGesture,
   usePanGesture,
-  VirtualGestureDetector,
 } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -66,21 +65,23 @@ const DEFAULT_SWIPE_FAIL = 10;
 const DEFAULT_MOMENTUM_SWIPE_FAIL = 40;
 
 // Detector strategy differs by platform. On native we host the gesture system
-// once at the root with InterceptingGestureDetector and attach the pager pan
-// and tab taps as VirtualGestureDetectors — these don't insert host views, so
-// they don't disrupt touch routing (which left tab buttons unresponsive until
-// a gesture reset the tree). The pager/pull pans attach to the *container*
-// view, not the pager row: RNGH only delivers a touch to handlers on the
-// touched view's ancestors, and the tab bar / headers are absolutely-
-// positioned siblings of the pager — attached at the pager, a pull starting
-// on the tab bar (or on header text) never reached the gesture. The pager
-// pan still stays off the chrome via its swipeGestureTopInset hitSlop. The
-// per-list Native gestures are the exception: they need host GestureDetectors
-// or they never receive events on Android (see the listNativeGestures note
-// below). On web that intercepting model routes pointer events differently
-// and breaks the pager swipe, so the pager keeps a standalone host
-// GestureDetector there, while list wrappers stay plain DOM scrollers so
-// horizontal drags can reach the pager.
+// once at the root with InterceptingGestureDetector; tab taps attach as
+// VirtualGestureDetectors (no host views inserted, so touch routing for the
+// buttons stays intact). The pager/pull pans ride the root detector itself
+// (its `gesture` prop — a host-level attachment spanning the container), for
+// two reasons: (1) RNGH only delivers a touch to handlers on the touched
+// view's ancestors, and the tab bar / headers are absolutely-positioned
+// siblings of the pager — attached any deeper, a pull starting on the tab
+// bar or on header text never reaches the gesture; (2) virtual attachments
+// re-attach when the set of virtual children changes on a commit, and a
+// touch landing in that window is silently dropped — the host attachment is
+// stable. The pager pan still stays off the chrome via its
+// swipeGestureTopInset hitSlop. The per-list Native gestures need host
+// GestureDetectors or they never receive events on Android (see the
+// listNativeGestures note below). On web that intercepting model routes
+// pointer events differently and breaks the pager swipe, so the pager keeps
+// a standalone host GestureDetector there, while list wrappers stay plain
+// DOM scrollers so horizontal drags can reach the pager.
 const IS_WEB = Platform.OS === 'web';
 // Width of the left-edge zone where the tab pan gesture refuses to activate,
 // leaving room for iOS edge-swipe-back / Android gesture-nav.
@@ -102,7 +103,14 @@ const NEEDS_EXPLICIT_GRAB_STOP = !IS_ANDROID;
 const PULL_RESISTANCE = 0.5;
 const PULL_TRIGGER_DISTANCE = 72;
 const PULL_HOLD_OFFSET = 56;
-const PULL_ACTIVATION = 12;
+// MUST stay below Android's touch slop (~8dp): when a chrome touch has no
+// active RNGH handler yet, a native ancestor intercepts the stream at slop
+// and cancels every BEGAN handler — pulls died ~50% of the time at 9dp with
+// the old 12dp threshold (device-verified; content touches were immune only
+// because the list's Native gesture activates early and locks the stream).
+// Activating under the slop wins the race deterministically. The default tab
+// bar's taps run simultaneousWith the pull so near-tap drifts can't eat them.
+const PULL_ACTIVATION = 6;
 const DEFAULT_SPRING: Required<NonNullable<ContainerProps['springConfig']>> = {
   damping: 30,
   stiffness: 200,
@@ -704,6 +712,12 @@ function usePagerGestures({
   return {
     listNativeGestures: nativeListGestures,
     pagerGestures: combinedPagerGestures,
+    // The real gesture object (relations like simultaneousWith need its
+    // gestureRelations — a bare { handlerTag } ref crashes RNGH's relation
+    // merging). Its identity changes per render, but relations resolve by
+    // handlerTag, which is stable for the component's lifetime, so holding
+    // an older instance (e.g. via the context memo) is fine.
+    pullPanGesture: customPullPan,
   };
 }
 
@@ -1563,35 +1577,36 @@ function ContainerImpl(props: ContainerImplProps) {
     }
   }, [tabCount, activeIndex, refreshingHold]);
 
-  const { listNativeGestures, pagerGestures } = usePagerGestures({
-    swipeEnabled,
-    swipeActivationDistance,
-    swipeFailDistance,
-    momentumSwipeFailDistance,
-    pagerPanHitSlop,
-    pinnedTotal,
-    spring,
-    tabCount,
-    activeIndex,
-    momentumActive,
-    grabCatch,
-    listRefs,
-    perPageScrollY,
-    isPanning,
-    startX,
-    translateX,
-    pageWidth,
-    reduceMotionSV,
-    freezeLists,
-    cancelScrollToTop,
-    syncLists,
-    scrollY,
-    handleIndexChange,
-    usesCustomPullSV,
-    isPulling,
-    refreshingHold,
-    triggerActiveRefresh,
-  });
+  const { listNativeGestures, pagerGestures, pullPanGesture } =
+    usePagerGestures({
+      swipeEnabled,
+      swipeActivationDistance,
+      swipeFailDistance,
+      momentumSwipeFailDistance,
+      pagerPanHitSlop,
+      pinnedTotal,
+      spring,
+      tabCount,
+      activeIndex,
+      momentumActive,
+      grabCatch,
+      listRefs,
+      perPageScrollY,
+      isPanning,
+      startX,
+      translateX,
+      pageWidth,
+      reduceMotionSV,
+      freezeLists,
+      cancelScrollToTop,
+      syncLists,
+      scrollY,
+      handleIndexChange,
+      usesCustomPullSV,
+      isPulling,
+      refreshingHold,
+      triggerActiveRefresh,
+    });
 
   const handleHeaderHeight = useCallback(
     (nextHeaderHeight: number) => {
@@ -1655,6 +1670,7 @@ function ContainerImpl(props: ContainerImplProps) {
       scrollToTopOffset,
       scrollHandlers,
       listNativeGestures,
+      pullPanGesture,
       pullDownBehavior,
       usesCustomPullSV,
       usesCustomPull,
@@ -1716,13 +1732,17 @@ function ContainerImpl(props: ContainerImplProps) {
       {IS_WEB ? (
         content
       ) : (
-        <InterceptingGestureDetector>
-          {/* Attached to the container view so pager/pull gestures can start
-              anywhere on the page INCLUDING the chrome overlays (tab bar,
-              header text) — see the detector-strategy note at the top. */}
-          <VirtualGestureDetector gesture={pagerGestures} touchAction="pan-y">
-            {content}
-          </VirtualGestureDetector>
+        /* The pager/pull gestures ride the root detector itself (host-level
+           attachment spanning the whole container) so they can start anywhere
+           on the page INCLUDING the chrome overlays (tab bar, header text).
+           A host attachment is also immune to the virtual-children re-attach
+           churn that intermittently dropped touches — see the
+           detector-strategy note at the top. */
+        <InterceptingGestureDetector
+          gesture={pagerGestures}
+          touchAction="pan-y"
+        >
+          {content}
         </InterceptingGestureDetector>
       )}
     </TabsContext.Provider>

@@ -183,6 +183,11 @@ export interface InternalTabsContextValue {
   /** Per-tab Native gestures wrapping each scroll view. They `requireToFail`
    * the pager pan so the list stays frozen during a horizontal page swipe. */
   listNativeGestures: any[];
+  /** The custom pull-to-refresh pan (Android stretch mode). Tab-bar taps
+   * should run `simultaneousWith` it: the pull activates below Android's
+   * touch slop, so without the relation a slightly-drifting tap on the bar
+   * would be cancelled by the pull's activation. */
+  pullPanGesture: any;
   pullDownBehavior: PullDownBehavior;
   usesCustomPullSV: SharedValue<boolean>;
   /**
