@@ -69,15 +69,19 @@ const DEFAULT_MOMENTUM_SWIPE_FAIL = 40;
 // once at the root with InterceptingGestureDetector and attach the pager pan
 // and tab taps as VirtualGestureDetectors — these don't insert host views, so
 // they don't disrupt touch routing (which left tab buttons unresponsive until
-// a gesture reset the tree). The per-list Native gestures are the exception:
-// they need host GestureDetectors or they never receive events on Android
-// (see the listNativeGestures note below). On web that intercepting model
-// routes pointer events differently and breaks the pager swipe, so we use the
-// standalone host GestureDetector for the pager, while list wrappers keep
-// their scroll views as plain DOM scrollers so horizontal drags can reach the
-// pager.
+// a gesture reset the tree). The pager/pull pans attach to the *container*
+// view, not the pager row: RNGH only delivers a touch to handlers on the
+// touched view's ancestors, and the tab bar / headers are absolutely-
+// positioned siblings of the pager — attached at the pager, a pull starting
+// on the tab bar (or on header text) never reached the gesture. The pager
+// pan still stays off the chrome via its swipeGestureTopInset hitSlop. The
+// per-list Native gestures are the exception: they need host GestureDetectors
+// or they never receive events on Android (see the listNativeGestures note
+// below). On web that intercepting model routes pointer events differently
+// and breaks the pager swipe, so the pager keeps a standalone host
+// GestureDetector there, while list wrappers stay plain DOM scrollers so
+// horizontal drags can reach the pager.
 const IS_WEB = Platform.OS === 'web';
-const PagerGestureDetector = IS_WEB ? GestureDetector : VirtualGestureDetector;
 // Width of the left-edge zone where the tab pan gesture refuses to activate,
 // leaving room for iOS edge-swipe-back / Android gesture-nav.
 const EDGE_SWIPE_MARGIN = 20;
@@ -391,6 +395,7 @@ function usePagerGestures({
   swipeFailDistance,
   momentumSwipeFailDistance,
   pagerPanHitSlop,
+  pinnedTotal,
   spring,
   tabCount,
   activeIndex,
@@ -418,6 +423,7 @@ function usePagerGestures({
   swipeFailDistance: number;
   momentumSwipeFailDistance: number;
   pagerPanHitSlop: { left: number; top?: number };
+  pinnedTotal: number;
   spring: Required<NonNullable<ContainerProps['springConfig']>>;
   tabCount: number;
   activeIndex: SharedValue<number>;
@@ -630,6 +636,10 @@ function usePagerGestures({
     activeOffsetY: PULL_ACTIVATION,
     failOffsetY: -1,
     failOffsetX: [-16, 16],
+    // Attached at the container root, so the pull can start anywhere on the
+    // page or its chrome (tab bar, header) — except the pinned bar, which is
+    // fixed navigation and must not drive the pull.
+    hitSlop: { top: -pinnedTotal },
     simultaneousWith: nativeListGestures,
     onActivate: () => {
       'worklet';
@@ -788,11 +798,8 @@ function ContainerContentBase({
     <DefaultTabBar {...tabBarProps} />
   );
 
-  return (
-    <View
-      style={[styles.container, containerStyle]}
-      onLayout={(e) => onContainerHeight(e.nativeEvent.layout.height)}
-    >
+  const chrome = (
+    <>
       {renderPinnedHeader ? (
         <View
           style={[
@@ -850,35 +857,47 @@ function ContainerContentBase({
       <View style={styles.tabBarSlot} pointerEvents="box-none">
         {tabBarNode}
       </View>
+    </>
+  );
 
-      <View style={styles.pagerHost}>
-        <PagerGestureDetector gesture={pagerGestures} touchAction="pan-y">
-          <Animated.View
-            style={[
-              styles.pager,
-              { width: screenWidth * tabCount },
-              pagerStyle,
-            ]}
+  const pagerRow = (
+    <Animated.View
+      style={[styles.pager, { width: screenWidth * tabCount }, pagerStyle]}
+    >
+      {tabs.map((tab, index) => {
+        const shouldRender = !lazy || mountedTabIndices.has(index);
+
+        return (
+          <View
+            key={tab.key}
+            style={[styles.page, { width: screenWidth }]}
+            collapsable={false}
           >
-            {tabs.map((tab, index) => {
-              const shouldRender = !lazy || mountedTabIndices.has(index);
+            {shouldRender ? (
+              <TabIndexContext.Provider value={index}>
+                {tab.children}
+              </TabIndexContext.Provider>
+            ) : null}
+          </View>
+        );
+      })}
+    </Animated.View>
+  );
 
-              return (
-                <View
-                  key={tab.key}
-                  style={[styles.page, { width: screenWidth }]}
-                  collapsable={false}
-                >
-                  {shouldRender ? (
-                    <TabIndexContext.Provider value={index}>
-                      {tab.children}
-                    </TabIndexContext.Provider>
-                  ) : null}
-                </View>
-              );
-            })}
-          </Animated.View>
-        </PagerGestureDetector>
+  return (
+    <View
+      style={[styles.container, containerStyle]}
+      onLayout={(e) => onContainerHeight(e.nativeEvent.layout.height)}
+    >
+      {chrome}
+      <View style={styles.pagerHost}>
+        {IS_WEB ? (
+          <GestureDetector gesture={pagerGestures} touchAction="pan-y">
+            {pagerRow}
+          </GestureDetector>
+        ) : (
+          pagerRow
+        )}
       </View>
     </View>
   );
@@ -1550,6 +1569,7 @@ function ContainerImpl(props: ContainerImplProps) {
     swipeFailDistance,
     momentumSwipeFailDistance,
     pagerPanHitSlop,
+    pinnedTotal,
     spring,
     tabCount,
     activeIndex,
@@ -1696,7 +1716,14 @@ function ContainerImpl(props: ContainerImplProps) {
       {IS_WEB ? (
         content
       ) : (
-        <InterceptingGestureDetector>{content}</InterceptingGestureDetector>
+        <InterceptingGestureDetector>
+          {/* Attached to the container view so pager/pull gestures can start
+              anywhere on the page INCLUDING the chrome overlays (tab bar,
+              header text) — see the detector-strategy note at the top. */}
+          <VirtualGestureDetector gesture={pagerGestures} touchAction="pan-y">
+            {content}
+          </VirtualGestureDetector>
+        </InterceptingGestureDetector>
       )}
     </TabsContext.Provider>
   );

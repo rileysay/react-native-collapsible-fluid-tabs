@@ -108,7 +108,9 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
 
   // Static per layout (no shared values), so a plain View — an animated
   // style here would register a do-nothing Reanimated mapper per page.
-  const footerSpacerHeight = tabBarHeight + bottomInset + FOOTER_GAP;
+  // Just the safe-area inset + breathing room: the tab bar is top chrome and
+  // never overlaps the list bottom.
+  const footerSpacerHeight = bottomInset + FOOTER_GAP;
 
   const userListHeader = props.ListHeaderComponent;
   const userListFooter = props.ListFooterComponent;
