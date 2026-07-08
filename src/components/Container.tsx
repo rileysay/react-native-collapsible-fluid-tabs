@@ -618,11 +618,13 @@ function usePagerGestures({
   }
 
   // The custom pull pan (Android stretch mode). Engages only when the active
-  // list sits at its top; activates on a downward drag (the pager pan has
-  // already failed by then via its failOffsetY) and fails fast on horizontal
-  // or upward movement so paging and scrolling are untouched. Simultaneous
-  // with the list Native gestures: at offset 0 a downward drag can't scroll,
-  // but the scroll handler may still claim the touch - it must not cancel us.
+  // list sits at its top; activates on a downward drag at PULL_ACTIVATION
+  // (6dp — under the pager pan's 10dp failOffsetY, so exclusivity comes from
+  // the race's offsets: the pull fails fast on horizontal or upward movement,
+  // the pager needs 15dp of horizontal travel) so paging and scrolling are
+  // untouched. Simultaneous with the list Native gestures: at offset 0 a
+  // downward drag can't scroll, but the scroll handler may still claim the
+  // touch - it must not cancel us.
   const customPullEnabled = useSharedValue(false);
   useAnimatedReaction(
     () => {
@@ -679,12 +681,10 @@ function usePagerGestures({
     },
   });
 
-  // One detector hosts both pager gestures as a race: stacking a second
-  // VirtualGestureDetector on the same child silently starves the inner
-  // gesture of touches (both try to attach to the same host view), so the
-  // pull pan must ride the same detector as the pager pan. The race adds no
-  // relations - their offsets keep them mutually exclusive, and the pull's
-  // `enabled` shared value keeps it inert outside Android stretch mode.
+  // Both pager gestures ride the root InterceptingGestureDetector's `gesture`
+  // prop as one composed race. The race adds no relations - their offsets
+  // keep them mutually exclusive, and the pull's `enabled` shared value keeps
+  // it inert outside Android stretch mode.
   const combinedPagerGestures = useCompetingGestures(
     pagerPanGesture,
     customPullPan

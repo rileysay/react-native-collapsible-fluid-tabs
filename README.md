@@ -39,7 +39,7 @@ npm install @legendapp/list        # for Tabs.LegendList
 npm install @shopify/flash-list    # for Tabs.FlashList
 ```
 
-> **iOS:** the list backends include native code, so run `npx pod-install` after installing.
+> **iOS:** run `npx pod-install` after installing — the peer dependencies (and FlashList) include native code. `@legendapp/list` is JS-only.
 
 ### Version requirements
 
@@ -273,7 +273,7 @@ Returns `{ scrollY, headerHeight, collapseProgress (0→1), pinnedHeaderHeight, 
 - **Changing the tab count** remounts the pager and resets scroll positions. Keep the count stable; hide content per-tab instead of adding/removing tabs.
 - **Set a background** on `containerStyle` so nothing flashes through during overscroll.
 - **RefreshControl on Android** — import from **`react-native-gesture-handler`**, not `react-native`. RN's control often needs a second pull inside the pager. `'static'` mode auto-sets `progressViewOffset`; `'stretch'` mode uses the Container's built-in pull indicator (still driven by your `refreshing` / `onRefresh`).
-- **Android overscroll** — lists default to `overScrollMode="never"` so the header stays glued to the content (native glow doesn't emit scroll events). Pass your own to re-enable it.
+- **Android overscroll** — lists default to `overScrollMode="never"`: Android 12+'s stretch overscroll moves the list's pixels without emitting scroll events, so the header can't follow it and a seam opens under the chrome. Override it per-list if you accept that trade-off.
 - **Reduced motion** — tab changes jump instantly when the OS setting is on.
 
 ---
