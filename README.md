@@ -6,7 +6,7 @@
 
 Collapsing headers, swipeable tabs, and synchronized scrolling for React Native.
 
-**[Documentation](https://fluid-tabs.vercel.app/docs) · [Live examples](https://fluid-tabs.vercel.app/examples) · [npm](https://www.npmjs.com/package/react-native-collapsible-fluid-tabs)**
+**[Website](https://fluid-tabs.vercel.app/) · [Live examples](https://fluid-tabs.vercel.app/examples) · [npm](https://www.npmjs.com/package/react-native-collapsible-fluid-tabs)**
 
 ## Installation
 
