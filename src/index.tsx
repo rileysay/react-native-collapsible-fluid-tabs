@@ -6,7 +6,18 @@ import { LegendList } from './components/LegendList';
 import { FlashList } from './components/FlashList';
 import { DefaultTabBar } from './components/DefaultTabBar';
 
-export const Tabs = {
+// Keep component aliases intact in declarations instead of expanding native
+// component props into React Native's private generated type paths.
+/** Coordinated header, pager, tab bar, and list components. Import from `/core` to omit optional adapters. */
+export const Tabs: {
+  Container: typeof Container;
+  Tab: typeof Tab;
+  FlatList: typeof FlatList;
+  ScrollView: typeof ScrollView;
+  LegendList: typeof LegendList;
+  FlashList: typeof FlashList;
+  DefaultTabBar: typeof DefaultTabBar;
+} = {
   Container,
   Tab,
   FlatList,

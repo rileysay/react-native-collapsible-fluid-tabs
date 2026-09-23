@@ -1,41 +1,29 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": [".nvmrc", ".yarnrc.yml"],
+  "globalDependencies": [".nvmrc", ".yarnrc.yml", ".yarn/patches/react-native-npm-0.86.3-a26c4d71a9.patch"],
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "build:android": {
       "env": ["ANDROID_HOME", "ORG_GRADLE_PROJECT_newArchEnabled"],
       "inputs": [
-        "package.json",
-        "android",
-        "!android/build",
-        "src/*.ts",
-        "src/*.tsx",
-        "example/package.json",
-        "example/android",
-        "!example/android/.gradle",
-        "!example/android/build",
-        "!example/android/app/build"
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/src/**",
+        "$TURBO_ROOT$/babel.config.js"
       ],
       "outputs": []
     },
     "build:ios": {
       "env": [
+        "XCODE_VERSION",
         "RCT_NEW_ARCH_ENABLED",
         "RCT_REMOVE_LEGACY_ARCH",
         "RCT_USE_RN_DEP",
         "RCT_USE_PREBUILT_RNCORE"
       ],
       "inputs": [
-        "package.json",
-        "*.podspec",
-        "ios",
-        "src/*.ts",
-        "src/*.tsx",
-        "example/package.json",
-        "example/ios",
-        "!example/ios/build",
-        "!example/ios/Pods"
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/src/**",
+        "$TURBO_ROOT$/babel.config.js"
       ],
       "outputs": []
     }

@@ -2,9 +2,9 @@
   "$schema": "https://react.doctor/schema/config.json",
   "ignore": {
     "rules": [
-      // forwardRef/useContext stay while peer `react` is "*" — forwardRef is
-      // deprecated-but-supported in React 19, and removing it would break
-      // older consumers. Revisit when the peer floor is raised to React 19.
+      // forwardRef/useContext remain supported on React 19. Keep the existing
+      // component/ref API while changes here focus on gesture correctness;
+      // a ref-as-prop migration can be reviewed independently.
       "react-doctor/no-react19-deprecated-apis",
       // False positive: `@legendapp/list` is imported via its
       // `@legendapp/list/reanimated` subpath (src/components/LegendList.tsx).
@@ -18,7 +18,7 @@
         "files": ["src/components/Container.tsx"],
         "rules": [
           // Hook loops are keyed on tab count and the outer Container remounts
-          // ContainerImpl via key={tabs.length}, so hook order is stable for
+          // ContainerImpl whenever ordered tab identities change, so hook order is stable for
           // the lifetime of every mount (documented in the component).
           "react-doctor/rules-of-hooks",
           // Header measurement (onLayout -> state with an estimated fallback)
@@ -49,13 +49,13 @@
           "src/components/ScrollView.tsx"
         ],
         "rules": [
-          // Header/footer spacer memos intentionally omit reanimated styles
-          // (stable identity, UI-thread driven) from deps.
+          // Native scroll bridge callbacks capture refs/shared values whose
+          // identities remain stable for the mounted tab.
           "react-doctor/exhaustive-deps",
           // The memoized JSX is used by the early-return (web) path too, so
           // it is not wasted work on bailout.
           "react-doctor/rerender-memo-before-early-return",
-          // renderInjected unwraps the user's ListHeader/FooterComponent prop
+          // renderListComponent unwraps the user's ListHeader/FooterComponent prop
           // (component-or-element), mirroring how RN lists consume it.
           "react-doctor/no-render-in-render",
           // LegendList's native bridge registers a Reanimated event handler

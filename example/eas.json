@@ -1,0 +1,22 @@
+{
+  "cli": {
+    "version": ">= 23.2.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "corepack": true,
+      "android": {
+        "image": "sdk-57",
+        "buildType": "apk"
+      },
+      "ios": {
+        "image": "sdk-57",
+        "simulator": false
+      }
+    }
+  }
+}

@@ -7,22 +7,23 @@ import {
 import { useTabsContext } from './context';
 import { getHeaderScrollOffset } from './utils/paging';
 
+/** Header measurements and animation values returned by {@link useCollapsibleHeader}. */
 export interface CollapsibleHeader {
   /** Active page's scroll position (shared value). */
   scrollY: SharedValue<number>;
-  /** Measured collapsing-header height (shared value). */
+  /** Collapsing-header height: the initial estimate until layout provides a measurement. Zero without a header. */
   headerHeight: SharedValue<number>;
-  /** 0 = header fully expanded, 1 = fully collapsed (derived, clamped). */
+  /** 0 = fully expanded, 1 = fully collapsed (derived, clamped). Remains 0 when header height is 0. */
   collapseProgress: DerivedValue<number>;
   /** Pinned header height (excludes the safe-area top inset). */
   pinnedHeaderHeight: number;
   /** Tab bar height. */
   tabBarHeight: number;
-  /** Safe-area top inset. */
+  /** Reserved top inset (the device safe area unless Container.topInset overrides it). */
   topInset: number;
   /**
-   * Y offset where scrollable content begins, i.e. the height of the fixed
-   * chrome above the list (pinned header + top inset + tab bar). Handy for
+   * Fixed chrome height when the collapsing header is fully collapsed
+   * (pinned header + top inset + tab bar). Excludes the collapsing header. Handy for
    * positioning a custom sticky element or a RefreshControl.
    */
   contentTop: number;

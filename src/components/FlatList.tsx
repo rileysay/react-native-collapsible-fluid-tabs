@@ -1,6 +1,6 @@
 import React, {
   forwardRef,
-  useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   useMemo,
 } from 'react';
@@ -13,27 +13,20 @@ import {
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
-  useEvent,
-  useScrollOffset,
   type AnimatedRef,
-  type SharedValue,
 } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
 import { FOOTER_GAP } from '../constants';
+import { renderListComponent } from '../utils/renderListComponent';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
+import { useTrackedScrollRef } from './useTrackedScrollRef';
+import { useListScrollMetrics } from './useListScrollMetrics';
 
 // On web the browser scroll view should stay a plain DOM scroller; wrapping it
 // in a Native GestureDetector steals horizontal pointer drags from the pager.
 const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
-const FLAT_LIST_SCROLL_EVENT_NAMES = [
-  'onScroll',
-  'onMomentumScrollBegin',
-  'onMomentumScrollEnd',
-] as const;
-// Host detector, NOT VirtualGestureDetector: virtual Native gestures get no
-// touch events on Android, which kills the mid-momentum page swipe. See the
-// listNativeGestures note in Container.tsx.
+// Host the list's Native gesture on its scrollable component.
 const ListDetector = GestureDetector;
 
 export type TabsFlatListProps<T> = Omit<
@@ -47,17 +40,31 @@ function TabsFlatListInner<T>(
   props: TabsFlatListProps<T>,
   forwardedRef: React.Ref<RNFlatList<T>>
 ) {
+  const {
+    onRefresh,
+    refreshing,
+    progressViewOffset,
+    minContentHeight,
+    onScrollBeginDrag,
+    onLayout,
+    onContentSizeChange,
+    onMomentumScrollBegin,
+    onMomentumScrollEnd,
+    ...listProps
+  } = props;
   const ctx = useTabsContext();
   const index = useTabIndex();
+  const scrollMetrics = useListScrollMetrics(ctx.listScrollMetrics[index]!, {
+    onLayout,
+    onContentSizeChange,
+    scrollEnabled: props.scrollEnabled,
+    decelerationRate: props.decelerationRate,
+  });
   const {
     listRefs,
+    listMounted,
     listNativeGestures,
-    perPageScrollY,
-    scrollY,
-    scrollToTopIndex,
-    activeIndex,
-    momentumActive,
-    usesCustomPullSV,
+    scrollHandlers,
     headerHeight,
     pinnedHeaderHeight,
     topInset,
@@ -67,23 +74,22 @@ function TabsFlatListInner<T>(
   } = ctx;
 
   const ref = listRefs[index] as AnimatedRef<RNFlatList<T>>;
+  const trackedRef = useTrackedScrollRef(ref, listMounted[index]);
   const nativeGesture = listNativeGestures[index];
-  const pageScrollY = perPageScrollY[index];
-  useScrollOffset(!USE_DIRECT_WEB_SCROLL ? ref : undefined, pageScrollY);
-  useFlatListNativeScrollBridge({
-    enabled: !USE_DIRECT_WEB_SCROLL,
-    ref,
-    scrollY,
-    scrollToTopIndex,
-    activeIndex,
-    momentumActive,
-    usesCustomPullSV,
-    index,
-  });
   const refreshControl = useAutoRefreshControl(
     props.refreshControl,
-    nativeGesture
+    nativeGesture,
+    { onRefresh, refreshing, progressViewOffset }
   );
+
+  // Android replaces the inner native scroll view when its refresh wrapper
+  // changes, while the outer FlatList ref stays attached. Refresh the animated
+  // ref's cached native handle so UI-thread scrollTo targets the new view too.
+  useLayoutEffect(() => {
+    if (Platform.OS === 'android' && ref.current) {
+      ref(ref.current);
+    }
+  }, [ref, refreshControl]);
 
   useImperativeHandle(
     forwardedRef,
@@ -108,37 +114,44 @@ function TabsFlatListInner<T>(
     () => (
       <>
         <Animated.View style={headerSpacerStyle} />
-        {renderInjected(userListHeader)}
+        {renderListComponent(userListHeader)}
       </>
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userListHeader]
+    [headerSpacerStyle, userListHeader]
   );
 
   const ListFooterComponent = useMemo(
     () => (
       <>
-        {renderInjected(userListFooter)}
+        {renderListComponent(userListFooter)}
         <View style={{ height: footerSpacerHeight }} />
       </>
     ),
     [userListFooter, footerSpacerHeight]
   );
 
-  const minHeight = props.minContentHeight ?? minPageContentHeight;
+  const minHeight = minContentHeight ?? minPageContentHeight;
   const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
   const AnimatedFlatList =
     Animated.FlatList as unknown as React.ComponentType<any>;
 
   const list = (
     <AnimatedFlatList
-      {...(props as FlatListProps<T>)}
-      ref={ref}
+      {...listProps}
+      ref={trackedRef}
       refreshControl={refreshControl}
+      // The animated event manager follows inner native view replacements.
+      // Observing only the outer ref leaves listeners on the old Android view
+      // after switching between native refresh and stretched pull.
+      onScroll={scrollHandlers[index]}
+      {...(onScrollBeginDrag ? { onScrollBeginDrag } : {})}
+      {...(onMomentumScrollBegin ? { onMomentumScrollBegin } : {})}
+      {...(onMomentumScrollEnd ? { onMomentumScrollEnd } : {})}
       scrollEventThrottle={1}
+      {...scrollMetrics}
       overScrollMode={props.overScrollMode ?? 'never'}
-      directionalLockEnabled
-      nestedScrollEnabled
+      directionalLockEnabled={props.directionalLockEnabled ?? true}
+      nestedScrollEnabled={props.nestedScrollEnabled ?? true}
       showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}
@@ -149,87 +162,6 @@ function TabsFlatListInner<T>(
   if (USE_DIRECT_WEB_SCROLL) return list;
 
   return <ListDetector gesture={nativeGesture}>{list}</ListDetector>;
-}
-
-type ReanimatedScrollEvent = {
-  eventName?: string;
-  contentOffset: { x: number; y: number };
-};
-
-type WorkletEventHandler = {
-  workletEventHandler: {
-    registerForEvents: (tag: number) => void;
-    unregisterFromEvents: (tag: number) => void;
-  };
-};
-
-function useFlatListNativeScrollBridge({
-  enabled,
-  ref,
-  scrollY,
-  scrollToTopIndex,
-  activeIndex,
-  momentumActive,
-  usesCustomPullSV,
-  index,
-}: {
-  enabled: boolean;
-  ref: AnimatedRef<any> | undefined;
-  scrollY: SharedValue<number>;
-  scrollToTopIndex: SharedValue<number>;
-  activeIndex: SharedValue<number>;
-  momentumActive: SharedValue<boolean>;
-  usesCustomPullSV: SharedValue<boolean>;
-  index: number;
-}) {
-  const eventHandler = useEvent<ReanimatedScrollEvent>((event) => {
-    'worklet';
-    const offset =
-      event.contentOffset.x === 0
-        ? event.contentOffset.y
-        : event.contentOffset.x;
-
-    if (event.eventName?.endsWith('onMomentumScrollEnd')) {
-      momentumActive.value = false;
-    } else if (
-      event.eventName?.endsWith('onMomentumScrollBegin') &&
-      activeIndex.value === index
-    ) {
-      momentumActive.value = true;
-    } else if (event.eventName?.endsWith('onScroll')) {
-      if (scrollToTopIndex.value === index) return;
-      if (activeIndex.value !== index) return;
-      const preserveCustomPull =
-        usesCustomPullSV.value && scrollY.value < 0 && offset <= 1;
-      if (!preserveCustomPull) {
-        scrollY.value = offset;
-      }
-    }
-  }, FLAT_LIST_SCROLL_EVENT_NAMES) as unknown as WorkletEventHandler;
-
-  useEffect(() => {
-    if (!enabled || !ref) return;
-
-    return ref.observe((tag) => {
-      if (!tag) return;
-
-      eventHandler.workletEventHandler.registerForEvents(tag);
-      return () => {
-        eventHandler.workletEventHandler.unregisterFromEvents(tag);
-      };
-    });
-  }, [enabled, eventHandler, ref]);
-}
-
-function renderInjected(
-  node: FlatListProps<unknown>['ListHeaderComponent']
-): React.ReactNode {
-  if (!node) return null;
-  if (typeof node === 'function') {
-    const Comp = node as React.ComponentType;
-    return <Comp />;
-  }
-  return node as React.ReactNode;
 }
 
 export const FlatList = forwardRef(TabsFlatListInner) as <T>(

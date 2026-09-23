@@ -27,5 +27,9 @@
     "target": "ESNext",
     "types": ["jest"],
     "verbatimModuleSyntax": true
-  }
+  },
+  // Expo 57's generated expo-env file adds legacy RN interface augmentations
+  // that shadow RN 0.86's strict type aliases. Keep its runtime globals in
+  // example/env.d.ts and use React Native's own strict component/web types.
+  "exclude": ["node_modules", "lib", "example/node_modules", "example/dist", "example/expo-env.d.ts"]
 }

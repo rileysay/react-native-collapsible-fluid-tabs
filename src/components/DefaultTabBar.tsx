@@ -1,4 +1,11 @@
-import React, { useContext, useRef, useState, type ReactNode } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Platform,
   StyleSheet,
@@ -9,6 +16,7 @@ import {
 } from 'react-native';
 import {
   GestureDetector,
+  ScrollView,
   VirtualGestureDetector,
   useTapGesture,
 } from 'react-native-gesture-handler';
@@ -20,6 +28,7 @@ import Animated, {
   useAnimatedRef,
   useAnimatedStyle,
   useSharedValue,
+  useReducedMotion,
   type DerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -29,6 +38,7 @@ import { TabsContext } from '../context';
 import { getHeaderScrollOffset } from '../utils/paging';
 import type { TabBarRenderProps, TabConfig } from '../types';
 
+/** Color overrides for {@link DefaultTabBarProps.colors}. */
 export interface DefaultTabBarColors {
   /** Background of the tab bar. */
   background?: string;
@@ -36,7 +46,7 @@ export interface DefaultTabBarColors {
   trackBackground?: string;
   /** Color of the moving pill behind the active tab. */
   pillBackground?: string;
-  /** Tint color applied to icons (when icons are images via tintColor). */
+  /** Tint supplied to icon elements through both `color` and `tintColor`. */
   iconTint?: string;
   /** Color used for label text. */
   labelColor?: string;
@@ -46,7 +56,9 @@ export interface DefaultTabBarColors {
   badgeText?: string;
 }
 
+/** Props for {@link DefaultTabBar}, including state supplied by the container. */
 export interface DefaultTabBarProps extends TabBarRenderProps {
+  /** Overrides for the default light tab-bar palette. */
   colors?: DefaultTabBarColors;
   /** Side padding inside the pill container. Default 16. */
   sidePadding?: number;
@@ -84,9 +96,11 @@ const PILL_PADDING = 3;
 // moves TAB_FADE_DISTANCE (in fractional pages) away from that tab.
 const TAB_INACTIVE_OPACITY = 0.4;
 const TAB_FADE_DISTANCE = 0.5;
+const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 const TabGestureDetector =
   Platform.OS === 'web' ? GestureDetector : VirtualGestureDetector;
 
+/** Pill tab bar that follows paging and header collapse; accepts the container's renderTabBar props. */
 export function DefaultTabBar(props: DefaultTabBarProps) {
   const {
     tabs,
@@ -111,6 +125,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   } = props;
 
   const { width: screenWidth } = useWindowDimensions();
+  const [measuredWidth, setMeasuredWidth] = useState<number>();
   // Nullable on purpose: the default bar can be rendered through a custom
   // renderTabBar wrapper, but the pull relation only exists inside a
   // Tabs.Container.
@@ -118,7 +133,10 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
   const c = { ...DEFAULT_COLORS, ...(colors ?? {}) };
   const topOffset = pinnedHeaderHeight + topInset;
   const stretch = pullDownBehavior === 'stretch';
-  const containerWidth = screenWidth - sidePadding * 2;
+  const containerWidth = Math.max(
+    0,
+    (measuredWidth ?? screenWidth) - sidePadding * 2
+  );
   const fallbackScrollToTopIndex = useSharedValue(-1);
   const fallbackScrollToTopOffset = useSharedValue(0);
   const headerScrollToTopIndex = scrollToTopIndex ?? fallbackScrollToTopIndex;
@@ -183,6 +201,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
 
   return (
     <Animated.View
+      onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}
       style={[
         styles.wrap,
         {
@@ -266,7 +285,7 @@ function FitBar({
           badgeBackground={c.badgeBackground}
           badgeText={c.badgeText}
           selected={index === selectedIndex}
-          onPress={() => onTabPress(index)}
+          onTabPress={onTabPress}
           pullPanGesture={pullPanGesture}
         />
       ))}
@@ -285,7 +304,8 @@ function ScrollableBar({
   containerWidth,
   pullPanGesture,
 }: BarProps) {
-  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollRef = useAnimatedRef<ScrollView>();
+  const reduceMotion = useReducedMotion();
   // Measured { x, width } for each tab, in content coordinates — drives the
   // variable-width pill and the auto-scroll centering.
   const tabLayouts = useSharedValue<{ x: number; width: number }[]>([]);
@@ -318,26 +338,34 @@ function ScrollableBar({
     };
   });
 
-  // Keep the active tab centred as it changes (tap or swipe settle).
+  // Centre the tab when navigation selects a target, before the pager settles.
   useAnimatedReaction(
     () => {
       'worklet';
-      return Math.round(activeIndex.value);
+      return {
+        index: Math.round(activeIndex.value),
+        layouts: tabLayouts.value,
+      };
     },
-    (i) => {
+    ({ index: i, layouts }, previous) => {
       'worklet';
-      const layouts = tabLayouts.value;
       if (layouts.length < tabs.length) return;
       const tab = layouts[Math.max(0, Math.min(i, tabs.length - 1))]!;
       const target = tab.x + tab.width / 2 - containerWidth / 2;
-      scrollTo(scrollRef, Math.max(0, target), 0, true);
+      scrollTo(
+        scrollRef,
+        Math.max(0, target),
+        0,
+        !reduceMotion && previous !== null
+      );
     }
   );
 
   return (
-    <Animated.ScrollView
+    <AnimatedScrollView
       ref={scrollRef}
       horizontal
+      requireToFail={pullPanGesture as never}
       showsHorizontalScrollIndicator={false}
       accessibilityRole="tablist"
       style={[
@@ -358,12 +386,12 @@ function ScrollableBar({
           badgeBackground={c.badgeBackground}
           badgeText={c.badgeText}
           selected={index === selectedIndex}
-          onPress={() => onTabPress(index)}
+          onTabPress={onTabPress}
           onMeasure={setLayout}
           pullPanGesture={pullPanGesture}
         />
       ))}
-    </Animated.ScrollView>
+    </AnimatedScrollView>
   );
 }
 
@@ -376,7 +404,7 @@ interface TabButtonProps {
   badgeBackground: string;
   badgeText: string;
   selected: boolean;
-  onPress: () => void;
+  onTabPress: (index: number) => void;
   /** When provided, the button reports its layout and uses content width. */
   onMeasure?: (index: number, x: number, width: number) => void;
   pullPanGesture?: object;
@@ -391,10 +419,12 @@ function TabButton({
   badgeBackground,
   badgeText,
   selected,
-  onPress,
+  onTabPress,
   onMeasure,
   pullPanGesture,
 }: TabButtonProps) {
+  const onPress = useCallback(() => onTabPress(index), [index, onTabPress]);
+  const label = tab.label || (tab.icon == null ? tab.name : undefined);
   const animStyle = useAnimatedStyle(() => {
     'worklet';
     const distance = Math.abs(pagerOffset.value - index);
@@ -410,19 +440,20 @@ function TabButton({
     return { opacity };
   });
 
-  // A tap gesture (not RN's Pressable) keeps the tab button in RNGH's gesture
-  // system alongside the pager pan. Mixing RN touch handlers with RNGH leaves
-  // the touch responder stuck after some gestures (taps stop registering until
-  // another gesture resets it). A Tap's onActivate fires only on a valid tap.
-  // simultaneousWith the pull pan: the pull activates below the touch slop
-  // (see PULL_ACTIVATION), so without the relation a tap drifting a few dp
-  // downward would be cancelled by the pull activating.
-  const tap = useTapGesture({
-    simultaneousWith: pullPanGesture ? [pullPanGesture as never] : undefined,
-    onActivate: () => {
-      scheduleOnRN(onPress);
-    },
-  });
+  // A stationary release selects the tab. A vertical drag owns the entire
+  // touch once it activates, including reversals; it must not also tap a tab.
+  const tap = useTapGesture(
+    useMemo(
+      () => ({
+        requireToFail: pullPanGesture ? [pullPanGesture as never] : undefined,
+        onActivate: () => {
+          'worklet';
+          scheduleOnRN(onPress);
+        },
+      }),
+      [onPress, pullPanGesture]
+    )
+  );
 
   const handleLayout = onMeasure
     ? (e: LayoutChangeEvent) => {
@@ -436,18 +467,26 @@ function TabButton({
       <View
         style={onMeasure ? styles.tabButtonScroll : styles.tabButton}
         onLayout={handleLayout}
+        accessible
+        focusable={Platform.OS === 'web'}
         accessibilityRole="tab"
         accessibilityState={{ selected }}
-        accessibilityLabel={tab.label ?? tab.name}
+        aria-selected={selected}
+        accessibilityLabel={tab.label || tab.name}
+        accessibilityActions={[{ name: 'activate' }]}
+        onAccessibilityTap={onPress}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'activate') onPress();
+        }}
       >
         <Animated.View style={[styles.tabButtonInner, animStyle]}>
           {renderIcon(tab.icon, iconTint)}
-          {tab.label ? (
+          {label ? (
             <Text
               style={[styles.label, { color: labelColor }]}
               numberOfLines={1}
             >
-              {tab.label}
+              {label}
             </Text>
           ) : null}
           {tab.badge != null && tab.badge !== false ? (
@@ -516,13 +555,17 @@ const styles = StyleSheet.create({
   },
   tabButton: {
     flex: 1,
+    minHeight: 48,
     paddingVertical: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   tabButtonScroll: {
+    minHeight: 48,
     paddingVertical: 8,
     paddingHorizontal: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   tabButtonInner: {
     alignItems: 'center',

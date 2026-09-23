@@ -4,10 +4,13 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type ComponentRef,
   type Ref,
+  type RefObject,
 } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +21,7 @@ import {
 } from 'react-native';
 import {
   GestureDetector,
+  GestureStateManager,
   InterceptingGestureDetector,
   useCompetingGestures,
   useNativeGesture,
@@ -27,7 +31,6 @@ import Animated, {
   Easing,
   cancelAnimation,
   interpolate,
-  scrollTo,
   useAnimatedReaction,
   useAnimatedRef,
   useAnimatedScrollHandler,
@@ -45,7 +48,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TabIndexContext, TabsContext } from '../context';
 import { extractTabs, type ExtractedTab } from '../utils/children';
+import { PULL_HOLD_OFFSET, type RefreshTabState } from '../utils/refresh';
 import {
+  clampTabIndex,
   collapseTranslateY,
   getHeaderScrollOffset,
   resolveSnapIndex,
@@ -58,39 +63,36 @@ import type {
   TabsRef,
 } from '../types';
 import { DefaultTabBar } from './DefaultTabBar';
+import { useCustomPullGesture } from './useCustomPullGesture';
+import { useDirectionalPan } from './useDirectionalPan';
+import { useHeaderScroll, type HeaderScroll } from './useHeaderScroll';
+import { useWebContentDrag } from './useWebContentDrag';
+import { useWebWheelScroll } from './useWebWheelScroll';
+import { scrollToMountedRef } from '../utils/scrollRef';
+import {
+  INITIAL_SCROLL_METRICS,
+  type ListScrollMetrics,
+} from '../utils/scrollMetrics';
+import {
+  DEFAULT_SWIPE_ACTIVATION,
+  DEFAULT_SWIPE_FAIL,
+  DEFAULT_SWIPE_DIRECTION_RATIO,
+} from '../utils/gestureDirection';
 
 const DEFAULT_TAB_BAR_HEIGHT = 56;
-const DEFAULT_SWIPE_ACTIVATION = 15;
-const DEFAULT_SWIPE_FAIL = 10;
-const DEFAULT_MOMENTUM_SWIPE_FAIL = 40;
 
-// Detector strategy differs by platform. On native we host the gesture system
-// once at the root with InterceptingGestureDetector; tab taps attach as
-// VirtualGestureDetectors (no host views inserted, so touch routing for the
-// buttons stays intact). The pager/pull pans ride the root detector itself
-// (its `gesture` prop — a host-level attachment spanning the container), for
-// two reasons: (1) RNGH only delivers a touch to handlers on the touched
-// view's ancestors, and the tab bar / headers are absolutely-positioned
-// siblings of the pager — attached any deeper, a pull starting on the tab
-// bar or on header text never reaches the gesture; (2) virtual attachments
-// re-attach when the set of virtual children changes on a commit, and a
-// touch landing in that window is silently dropped — the host attachment is
-// stable. The pager pan still stays off the chrome via its
-// swipeGestureTopInset hitSlop. The per-list Native gestures need host
-// GestureDetectors or they never receive events on Android (see the
-// listNativeGestures note below). On web that intercepting model routes
-// pointer events differently and breaks the pager swipe, so the pager keeps
-// a standalone host GestureDetector there, while list wrappers stay plain
-// DOM scrollers so horizontal drags can reach the pager.
+// Native pager/pull handlers attach above both the page row and its sibling
+// chrome overlays. Tab taps use virtual detectors under that intercepting
+// root; each list hosts its own Native gesture on the scrollable component.
+// Web attaches the pager to the stationary viewport and leaves list scrollers
+// without a Native detector so their pointer drags can reach the pager.
 const IS_WEB = Platform.OS === 'web';
 // Width of the left-edge zone where the tab pan gesture refuses to activate,
 // leaving room for iOS edge-swipe-back / Android gesture-nav.
 const EDGE_SWIPE_MARGIN = 20;
-// Android's ScrollView aborts a fling natively when a new touch lands on it
-// (the catch happens inside the gesture orchestrator — see listNativeGestures).
-// On iOS the scroll view's own pan recognizer is failure-required on the pager
-// pan, so it cannot begin (and catch the deceleration) while the pan is still
-// undetermined — the grab has to stop the fling explicitly via scrollTo.
+// The Android host Native gesture lets ScrollView handle a momentum catch.
+// On iOS we explicitly stop deceleration while the list recognizer waits for
+// the pager's directional decision. This path still needs device coverage.
 const IS_ANDROID = Platform.OS === 'android';
 const NEEDS_EXPLICIT_GRAB_STOP = !IS_ANDROID;
 
@@ -100,17 +102,6 @@ const NEEDS_EXPLICIT_GRAB_STOP = !IS_ANDROID;
 // signal iOS overscroll produces), the chrome's existing stretch math rides
 // down, and a custom indicator is revealed under the pinned bar. Distances
 // are dp of *pull* (finger travel × resistance).
-const PULL_RESISTANCE = 0.5;
-const PULL_TRIGGER_DISTANCE = 72;
-const PULL_HOLD_OFFSET = 56;
-// MUST stay below Android's touch slop (~8dp): when a chrome touch has no
-// active RNGH handler yet, a native ancestor intercepts the stream at slop
-// and cancels every BEGAN handler — pulls died ~50% of the time at 9dp with
-// the old 12dp threshold (device-verified; content touches were immune only
-// because the list's Native gesture activates early and locks the stream).
-// Activating under the slop wins the race deterministically. The default tab
-// bar's taps run simultaneousWith the pull so near-tap drifts can't eat them.
-const PULL_ACTIVATION = 6;
 const DEFAULT_SPRING: Required<NonNullable<ContainerProps['springConfig']>> = {
   damping: 30,
   stiffness: 200,
@@ -149,33 +140,17 @@ function createMountedTabs(
   return mounted;
 }
 
-function scrollToMountedRef(
-  ref: AnimatedRef<any> | undefined,
-  x: number,
-  y: number,
-  animated: boolean
-) {
-  'worklet';
-  if (!ref || !ref()) return false;
-  scrollTo(ref, x, y, animated);
-  return true;
-}
-
-function clampTabIndex(index: number, tabCount: number) {
-  'worklet';
-  return Math.max(0, Math.min(Math.round(index), tabCount - 1));
-}
-
+/** Coordinates named tab pages, a collapsing header, and an optional pinned header. */
 export const Container = forwardRef<TabsRef, ContainerProps>(
   function Container(props, ref) {
     const tabs = useMemo(() => extractTabs(props.children), [props.children]);
     // Per-tab state below is built with hook loops keyed on tab count. Remount
-    // the implementation whenever the count changes so React never sees a
-    // different number of hooks across renders (which would crash). Swapping
-    // tabs without changing the count keeps state and does not remount.
+    // the implementation whenever tab identity or order changes so React never
+    // sees a different number of hooks, and offsets/refs cannot migrate to a
+    // different tab after reordering or replacing tabs at the same count.
     return (
       <ContainerImpl
-        key={tabs.length}
+        key={JSON.stringify(tabs.map((tab) => tab.key))}
         {...props}
         tabs={tabs}
         containerRef={ref}
@@ -212,10 +187,14 @@ function useMountedTabs({
 
   const mountTabsAround = useCallback(
     (index: number) => {
-      if (!lazy) return;
       setMountedTabIndices((current) => {
         const next = new Set(current);
-        addMountedTabs(next, index, tabCount, resolvedLazyPreloadDistance);
+        addMountedTabs(
+          next,
+          index,
+          tabCount,
+          lazy ? resolvedLazyPreloadDistance : tabCount
+        );
         return next.size === current.size ? current : next;
       });
     },
@@ -236,6 +215,7 @@ function usePagerListState({
   headerHeight,
   momentumActive,
   usesCustomPullSV,
+  reduceMotionSV,
 }: {
   tabCount: number;
   activeIndex: SharedValue<number>;
@@ -243,20 +223,58 @@ function usePagerListState({
   headerHeight: SharedValue<number>;
   momentumActive: SharedValue<boolean>;
   usesCustomPullSV: SharedValue<boolean>;
+  reduceMotionSV: SharedValue<boolean>;
 }) {
   const scrollToTopIndex = useSharedValue(-1);
   const scrollToTopOffset = useSharedValue(0);
   // Tab count is stable for the lifetime of ContainerImpl because the outer
   // Container remounts it on count changes, so these hook loops keep a stable
   // shape while still giving every page its own animated ref and scroll value.
-  const listRefs: AnimatedRef<any>[] = [];
-  const perPageScrollY: SharedValue<number>[] = [];
+  const nextListRefs: AnimatedRef<any>[] = [];
+  const nextPerPageScrollY: SharedValue<number>[] = [];
+  const nextListMounted: SharedValue<boolean>[] = [];
+  const nextScrollMetrics: SharedValue<ListScrollMetrics>[] = [];
+  const nextPendingScrollY: SharedValue<number | null>[] = [];
   for (let i = 0; i < tabCount; i++) {
     /* eslint-disable react-hooks/rules-of-hooks */
-    listRefs.push(useAnimatedRef<Animated.FlatList<any>>());
-    perPageScrollY.push(useSharedValue(0));
+    nextListRefs.push(useAnimatedRef<Animated.FlatList<any>>());
+    nextPerPageScrollY.push(useSharedValue(0));
+    nextListMounted.push(useSharedValue(false));
+    nextScrollMetrics.push(useSharedValue({ ...INITIAL_SCROLL_METRICS }));
+    nextPendingScrollY.push(useSharedValue<number | null>(null));
     /* eslint-enable react-hooks/rules-of-hooks */
   }
+  // Hook results are stable for this component's lifetime. Keep their array
+  // identities stable too, otherwise every momentum toggle defeats the memoized
+  // content boundary by passing a newly allocated perPageScrollY prop.
+  const {
+    listRefs,
+    perPageScrollY,
+    listMounted,
+    listScrollMetrics,
+    pendingScrollY,
+  } = useMemo(
+    () => ({
+      listRefs: nextListRefs,
+      perPageScrollY: nextPerPageScrollY,
+      listMounted: nextListMounted,
+      listScrollMetrics: nextScrollMetrics,
+      pendingScrollY: nextPendingScrollY,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tabCount]
+  );
+
+  const headerScroll = useHeaderScroll({
+    activeIndex,
+    listRefs,
+    listMounted,
+    listScrollMetrics,
+    perPageScrollY,
+    scrollY,
+    usesCustomPullSV,
+    reduceMotionSV,
+  });
 
   const scrollHandlers: any[] = [];
   for (let i = 0; i < tabCount; i++) {
@@ -264,9 +282,30 @@ function usePagerListState({
     /* eslint-disable react-hooks/rules-of-hooks */
     scrollHandlers.push(
       useAnimatedScrollHandler({
+        onBeginDrag: (e) => {
+          'worklet';
+          if (headerScroll.index.value === i) {
+            headerScroll.cancel(false);
+            pageScrollY.value = e.contentOffset.y;
+            if (activeIndex.value === i) scrollY.value = e.contentOffset.y;
+          }
+          if (scrollToTopIndex.value !== i) return;
+          // The finger owns the native offset now. Stop both animated signals
+          // without issuing another scroll command that could fight the drag.
+          scrollToTopIndex.value = -1;
+          cancelAnimation(scrollToTopOffset);
+          cancelAnimation(scrollY);
+          pageScrollY.value = e.contentOffset.y;
+          if (activeIndex.value === i) scrollY.value = e.contentOffset.y;
+        },
         onScroll: (e) => {
           'worklet';
-          if (scrollToTopIndex.value === i) return;
+          if (
+            pendingScrollY[i]!.value !== null ||
+            scrollToTopIndex.value === i ||
+            headerScroll.index.value === i
+          )
+            return;
           const nextY = e.contentOffset.y;
           pageScrollY.value = nextY;
           if (activeIndex.value === i) {
@@ -300,60 +339,121 @@ function usePagerListState({
     useAnimatedReaction(
       () => {
         'worklet';
+        return {
+          pendingOffset: pendingScrollY[i]!.value,
+          mounted: listMounted[i]!.value,
+          metrics: listScrollMetrics[i]!.value,
+        };
+      },
+      ({ pendingOffset, mounted, metrics }) => {
+        'worklet';
+        if (
+          pendingOffset === null ||
+          !mounted ||
+          metrics.viewportHeight <= 0 ||
+          metrics.contentHeight <= 0
+        )
+          return;
+        // A lazy page cannot accept its offset until both its native view and
+        // content geometry exist. Keep the header at the requested offset in
+        // the meantime, then respect any explicit short-content height limit.
+        const target = Math.min(
+          pendingOffset,
+          Math.max(0, metrics.contentHeight - metrics.viewportHeight)
+        );
+        if (!scrollToMountedRef(ref, listMounted[i], 0, target, false)) return;
+        perPageScrollY[i]!.value = target;
+        if (activeIndex.value === i) scrollY.value = target;
+        pendingScrollY[i]!.value = null;
+      }
+    );
+    useAnimatedReaction(
+      () => {
+        'worklet';
         return scrollToTopIndex.value === i ? scrollToTopOffset.value : null;
       },
       (target) => {
         'worklet';
         if (target == null) return;
-        scrollToMountedRef(ref, 0, target, false);
+        scrollToMountedRef(ref, listMounted[i], 0, target, false);
       }
     );
     /* eslint-enable react-hooks/rules-of-hooks */
   }
 
+  const alignList = useCallback(
+    (index: number, target: number) => {
+      'worklet';
+      const pending = pendingScrollY[index]!;
+      if (
+        pending.value !== null ||
+        !scrollToMountedRef(
+          listRefs[index],
+          listMounted[index],
+          0,
+          target,
+          false
+        )
+      ) {
+        pending.value = target;
+      }
+      // Unmounted pages still need a logical offset: navigation reads it
+      // before React mounts the page and its native list becomes measurable.
+      perPageScrollY[index]!.value = target;
+    },
+    [listRefs, listMounted, pendingScrollY, perPageScrollY]
+  );
+
   // Stop every list dead at its current offset. Kills background flings and
   // in-flight animated scrolls so no page drifts away from where syncLists put
   // it.
-  const freezeLists = useCallback(
-    () => {
-      'worklet';
-      for (let i = 0; i < listRefs.length; i++) {
-        const ref = listRefs[i];
-        const y = perPageScrollY[i];
-        if (!ref || !y) continue;
-        const target =
-          scrollToTopIndex.value === i ? scrollToTopOffset.value : y.value;
-        if (scrollToMountedRef(ref, 0, target, false)) {
-          y.value = target;
-        }
-      }
-    },
-    // listRefs / perPageScrollY entries are stable for a given tabCount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabCount]
-  );
-
-  const cancelScrollToTop = useCallback(
-    () => {
-      'worklet';
-      const i = scrollToTopIndex.value;
-      if (i < 0 || i >= listRefs.length) return;
-      cancelAnimation(scrollToTopOffset);
-      cancelAnimation(scrollY);
-
+  const freezeLists = useCallback(() => {
+    'worklet';
+    for (let i = 0; i < listRefs.length; i++) {
       const ref = listRefs[i];
       const y = perPageScrollY[i];
-      const target = Math.max(0, scrollToTopOffset.value);
-      if (ref && y && scrollToMountedRef(ref, 0, target, false)) {
+      if (!ref || !y) continue;
+      const target =
+        scrollToTopIndex.value === i ? scrollToTopOffset.value : y.value;
+      if (scrollToMountedRef(ref, listMounted[i], 0, target, false)) {
         y.value = target;
-        if (activeIndex.value === i) scrollY.value = target;
       }
-      scrollToTopIndex.value = -1;
-    },
-    // listRefs / perPageScrollY entries are stable for a given tabCount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabCount]
-  );
+    }
+  }, [
+    listRefs,
+    listMounted,
+    perPageScrollY,
+    scrollToTopIndex,
+    scrollToTopOffset,
+  ]);
+
+  const cancelScrollToTop = useCallback(() => {
+    'worklet';
+    // Both forms of programmatic scrolling yield to navigation or a finger.
+    headerScroll.cancel();
+    const i = scrollToTopIndex.value;
+    if (i < 0 || i >= listRefs.length) return;
+    cancelAnimation(scrollToTopOffset);
+    cancelAnimation(scrollY);
+
+    const ref = listRefs[i];
+    const y = perPageScrollY[i];
+    const target = Math.max(0, scrollToTopOffset.value);
+    if (ref && y && scrollToMountedRef(ref, listMounted[i], 0, target, false)) {
+      y.value = target;
+      if (activeIndex.value === i) scrollY.value = target;
+    }
+    scrollToTopIndex.value = -1;
+  }, [
+    activeIndex,
+    headerScroll,
+    listRefs,
+    listMounted,
+    perPageScrollY,
+    scrollToTopIndex,
+    scrollToTopOffset,
+    scrollY,
+  ]);
 
   const syncLists = useCallback(
     (excludeIndex: number = -1) => {
@@ -373,20 +473,21 @@ function usePagerListState({
             : y.value < headerHeight.value
               ? headerHeight.value
               : null;
-        if (target !== null) {
-          if (scrollToMountedRef(ref, 0, target, false)) {
-            y.value = target;
-          }
+        // freezeLists/prepareForIndexChange handle momentum cancellation.
+        // Alignment itself needs no native command when the offset matches.
+        if (target !== null && target !== y.value) {
+          alignList(i, target);
         }
       }
     },
-    // listRefs / perPageScrollY entries are stable for a given tabCount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabCount]
+    [alignList, headerHeight, listRefs, perPageScrollY, scrollY]
   );
 
   return {
     listRefs,
+    listMounted,
+    listScrollMetrics,
+    headerScroll,
     perPageScrollY,
     scrollToTopIndex,
     scrollToTopOffset,
@@ -394,6 +495,7 @@ function usePagerListState({
     freezeLists,
     cancelScrollToTop,
     syncLists,
+    alignList,
   };
 }
 
@@ -401,8 +503,16 @@ function usePagerGestures({
   swipeEnabled,
   swipeActivationDistance,
   swipeFailDistance,
-  momentumSwipeFailDistance,
+  swipeDirectionRatio,
+  headerScrollEnabled,
+  headerScroll,
   pagerPanHitSlop,
+  swipeGestureTopInset,
+  tabBarHeight,
+  headerHeight,
+  scrollToTopIndex,
+  scrollToTopOffset,
+  pullDownBehavior,
   pinnedTotal,
   spring,
   tabCount,
@@ -410,6 +520,7 @@ function usePagerGestures({
   momentumActive,
   grabCatch,
   listRefs,
+  listMounted,
   perPageScrollY,
   isPanning,
   startX,
@@ -424,13 +535,22 @@ function usePagerGestures({
   usesCustomPullSV,
   isPulling,
   refreshingHold,
+  refreshStates,
   triggerActiveRefresh,
 }: {
   swipeEnabled: boolean;
   swipeActivationDistance: number;
   swipeFailDistance: number;
-  momentumSwipeFailDistance: number;
+  swipeDirectionRatio: number;
+  headerScrollEnabled: boolean;
+  headerScroll: HeaderScroll;
   pagerPanHitSlop: { left: number; top?: number };
+  swipeGestureTopInset: ContainerProps['swipeGestureTopInset'];
+  tabBarHeight: number;
+  headerHeight: SharedValue<number>;
+  scrollToTopIndex: SharedValue<number>;
+  scrollToTopOffset: SharedValue<number>;
+  pullDownBehavior: ContainerProps['pullDownBehavior'];
   pinnedTotal: number;
   spring: Required<NonNullable<ContainerProps['springConfig']>>;
   tabCount: number;
@@ -438,6 +558,7 @@ function usePagerGestures({
   momentumActive: SharedValue<boolean>;
   grabCatch: SharedValue<boolean>;
   listRefs: AnimatedRef<any>[];
+  listMounted: SharedValue<boolean>[];
   perPageScrollY: SharedValue<number>[];
   isPanning: SharedValue<boolean>;
   startX: SharedValue<number>;
@@ -452,265 +573,292 @@ function usePagerGestures({
   usesCustomPullSV: SharedValue<boolean>;
   isPulling: SharedValue<boolean>;
   refreshingHold: SharedValue<boolean>;
-  triggerActiveRefresh: () => void;
+  refreshStates: SharedValue<RefreshTabState[]>;
+  triggerActiveRefresh: (index: number) => void;
 }) {
-  // A finger that lands on a moving list drifts vertically (it instinctively
-  // tracks the content) far more than one starting a swipe at rest, so the
-  // tight at-rest failOffsetY would almost always fail the pager pan before
-  // activeOffsetX could activate it - making mid-momentum page swipes nearly
-  // impossible with a real finger. While momentum is running (and for the rest
-  // of a touch that grabbed it) swap in a relaxed fail distance.
-  //
-  // The momentum/grab-catch flag lives on the UI thread (momentumActive /
-  // grabCatch); we mirror it into React state and hand usePanGesture
-  // plain-number offsets. Passing shared values directly in `failOffsetY`
-  // makes RNGH's dev-time config validation read their `.value` during render,
-  // which trips Reanimated's strict "reading during render" warning. The flag
-  // only flips on momentum start/stop / grab-catch (never per frame), so the
-  // JS round-trip to reconfigure the gesture is negligible.
-  const resolvedGestureMomentumFail = Math.max(
-    momentumSwipeFailDistance,
-    swipeFailDistance
+  const directionConfig = useMemo(
+    () => ({
+      horizontalDistance: Number.isFinite(swipeActivationDistance)
+        ? Math.max(0, swipeActivationDistance)
+        : DEFAULT_SWIPE_ACTIVATION,
+      verticalDistance: Number.isFinite(swipeFailDistance)
+        ? Math.max(0, swipeFailDistance)
+        : DEFAULT_SWIPE_FAIL,
+      ratio: Number.isFinite(swipeDirectionRatio)
+        ? Math.max(1, swipeDirectionRatio)
+        : DEFAULT_SWIPE_DIRECTION_RATIO,
+    }),
+    [swipeActivationDistance, swipeFailDistance, swipeDirectionRatio]
   );
-  const [momentumFailActive, setMomentumFailActive] = useState(false);
-  useAnimatedReaction(
-    () => {
+  const pagerDirection = useDirectionalPan('horizontal', directionConfig);
+  const containsHeaderTouch = useCallback(
+    (y: number) => {
       'worklet';
-      return momentumActive.value || grabCatch.value;
-    },
-    (next, previous) => {
-      'worklet';
-      if (next !== previous) {
-        scheduleOnRN(setMomentumFailActive, next);
-      }
-    }
-  );
-  const failOffsetYDistance = momentumFailActive
-    ? resolvedGestureMomentumFail
-    : swipeFailDistance;
-
-  // Gesture Handler v3 hooks memoize internally - no useMemo wrapper needed.
-  const pagerPanGesture = usePanGesture({
-    enabled: swipeEnabled,
-    activeOffsetX: [-swipeActivationDistance, swipeActivationDistance],
-    failOffsetY: [-failOffsetYDistance, failOffsetYDistance],
-    hitSlop: pagerPanHitSlop,
-    onTouchesDown: () => {
-      'worklet';
-      if (!momentumActive.value) return;
-      grabCatch.value = true;
-      momentumActive.value = false;
-      if (NEEDS_EXPLICIT_GRAB_STOP) {
-        const i = clampTabIndex(activeIndex.value, tabCount);
-        const ref = listRefs[i];
-        const y = perPageScrollY[i];
-        if (ref && y && y.value > 0) {
-          scrollToMountedRef(ref, 0, y.value, false);
-        }
-      }
-    },
-    onActivate: () => {
-      'worklet';
-      isPanning.value = true;
-      startX.value = translateX.value;
-      cancelScrollToTop();
-      // A horizontal swipe instantly dismisses the custom pull's indicator
-      // (the X behavior — the refresh itself keeps running; landing on a
-      // new page also clears the hold via handleIndexChange). Gated to the
-      // custom pull: on iOS a negative scrollY is a real bounce offset.
-      if (usesCustomPullSV.value && scrollY.value < 0) {
-        cancelAnimation(scrollY);
-        scrollY.value = 0;
-      }
-      freezeLists();
-      syncLists(activeIndex.value);
-    },
-    onUpdate: (e) => {
-      'worklet';
-      if (!isPanning.value) return;
-      const w = pageWidth.value;
-      const raw = startX.value + e.translationX;
-      translateX.value = rubberBand(raw, -(tabCount - 1) * w, 0);
-    },
-    onDeactivate: (e) => {
-      'worklet';
-      const w = pageWidth.value;
-      const velocity = e.velocityX;
-      const prevIndex = activeIndex.value;
-      const nextIndex = resolveSnapIndex(
-        prevIndex,
-        e.translationX,
-        velocity,
-        w,
-        tabCount
+      const offset = getHeaderScrollOffset(
+        activeIndex.value,
+        tabCount,
+        perPageScrollY,
+        scrollY,
+        scrollToTopIndex.value,
+        scrollToTopOffset.value
       );
-      activeIndex.value = nextIndex;
+      const bottom =
+        pinnedTotal +
+        tabBarHeight +
+        headerHeight.value +
+        collapseTranslateY(
+          offset,
+          headerHeight.value,
+          pullDownBehavior === 'stretch'
+        );
+      return y >= pinnedTotal && y < bottom;
+    },
+    [
+      activeIndex,
+      tabCount,
+      perPageScrollY,
+      scrollY,
+      scrollToTopIndex,
+      scrollToTopOffset,
+      pinnedTotal,
+      tabBarHeight,
+      headerHeight,
+      pullDownBehavior,
+    ]
+  );
 
-      const target = -nextIndex * w;
-      const minX = -(tabCount - 1) * w;
-      const overscrolled = translateX.value > 0 || translateX.value < minX;
-      if (reduceMotionSV.value) {
-        translateX.value = target;
-      } else {
-        translateX.value = withSpring(target, {
-          ...spring,
-          velocity: overscrolled ? 0 : velocity,
-        });
-      }
-      syncLists(nextIndex);
-      const landedY = perPageScrollY[nextIndex];
-      if (landedY) scrollY.value = landedY.value;
-      if (nextIndex !== prevIndex) {
-        scheduleOnRN(handleIndexChange, nextIndex);
-      }
-    },
-    onFinalize: () => {
-      'worklet';
-      isPanning.value = false;
-      grabCatch.value = false;
-    },
-  });
+  // Memoize the hook input so unrelated React renders do not re-register its
+  // native configuration and callbacks. Threshold changes still update it.
+  const pagerPanGesture = usePanGesture(
+    useMemo<NonNullable<Parameters<typeof usePanGesture>[0]>>(
+      () => ({
+        enabled: swipeEnabled,
+        testID: 'fluid-tabs-pager',
+        manualActivation: true,
+        ...pagerDirection,
+        hitSlop: pagerPanHitSlop,
+        onTouchesDown: (e) => {
+          'worklet';
+          headerScroll.cancel();
+          if (swipeGestureTopInset === 'auto' && !isPanning.value) {
+            // Qualify the start against the visible chrome on UI. A static hitSlop
+            // based on expanded height wrongly excludes list content after collapse.
+            const touch = e.allTouches[0];
+            const offset = getHeaderScrollOffset(
+              activeIndex.value,
+              tabCount,
+              perPageScrollY,
+              scrollY,
+              scrollToTopIndex.value,
+              scrollToTopOffset.value
+            );
+            const chromeBottom =
+              pinnedTotal +
+              tabBarHeight +
+              headerHeight.value +
+              collapseTranslateY(
+                offset,
+                headerHeight.value,
+                pullDownBehavior === 'stretch'
+              );
+            if (touch && touch.y < chromeBottom) {
+              GestureStateManager.fail(e.handlerTag);
+              return;
+            }
+          }
+          pagerDirection.onTouchesDown(e);
+          if (!momentumActive.value) return;
+          grabCatch.value = true;
+          momentumActive.value = false;
+          if (NEEDS_EXPLICIT_GRAB_STOP) {
+            const i = clampTabIndex(activeIndex.value, tabCount);
+            const ref = listRefs[i];
+            const y = perPageScrollY[i];
+            if (ref && y && y.value > 0) {
+              scrollToMountedRef(ref, listMounted[i], 0, y.value, false);
+            }
+          }
+        },
+        onActivate: () => {
+          'worklet';
+          isPanning.value = true;
+          cancelAnimation(translateX);
+          startX.value = translateX.value;
+          cancelScrollToTop();
+          // Paging dismisses the custom pull's visible hold while its data request
+          // continues. The pull hook also invalidates a hold on index changes.
+          // On iOS a negative scrollY belongs to native overscroll.
+          if (usesCustomPullSV.value) {
+            isPulling.value = false;
+            refreshingHold.value = false;
+            if (scrollY.value < 0) {
+              cancelAnimation(scrollY);
+              scrollY.value = 0;
+            }
+          }
+          freezeLists();
+          syncLists(activeIndex.value);
+        },
+        onUpdate: (e) => {
+          'worklet';
+          if (!isPanning.value) return;
+          const w = pageWidth.value;
+          const raw = startX.value + e.translationX;
+          translateX.value = rubberBand(raw, -(tabCount - 1) * w, 0);
+        },
+        onDeactivate: (e) => {
+          'worklet';
+          if (!isPanning.value) return;
+          const w = pageWidth.value;
+          const velocity = e.canceled ? 0 : e.velocityX;
+          const prevIndex = activeIndex.value;
+          const nextIndex = resolveSnapIndex(
+            prevIndex,
+            e.translationX,
+            velocity,
+            w,
+            tabCount,
+            e.canceled
+          );
+          activeIndex.value = nextIndex;
+
+          const target = -nextIndex * w;
+          const minX = -(tabCount - 1) * w;
+          const overscrolled = translateX.value > 0 || translateX.value < minX;
+          if (reduceMotionSV.value) {
+            translateX.value = target;
+          } else {
+            translateX.value = withSpring(target, {
+              ...spring,
+              velocity: overscrolled ? 0 : velocity,
+            });
+          }
+          syncLists(nextIndex);
+          const landedY = perPageScrollY[nextIndex];
+          if (landedY) scrollY.value = landedY.value;
+          if (nextIndex !== prevIndex) {
+            scheduleOnRN(handleIndexChange, nextIndex);
+          }
+        },
+        onFinalize: () => {
+          'worklet';
+          isPanning.value = false;
+          grabCatch.value = false;
+        },
+      }),
+      [
+        swipeEnabled,
+        pagerDirection,
+        headerScroll,
+        pagerPanHitSlop,
+        swipeGestureTopInset,
+        isPanning,
+        activeIndex,
+        tabCount,
+        perPageScrollY,
+        scrollY,
+        scrollToTopIndex,
+        scrollToTopOffset,
+        pinnedTotal,
+        tabBarHeight,
+        headerHeight,
+        pullDownBehavior,
+        momentumActive,
+        grabCatch,
+        listRefs,
+        listMounted,
+        translateX,
+        startX,
+        cancelScrollToTop,
+        usesCustomPullSV,
+        isPulling,
+        refreshingHold,
+        freezeLists,
+        syncLists,
+        pageWidth,
+        reduceMotionSV,
+        spring,
+        handleIndexChange,
+      ]
+    )
+  );
   const panGestureWaitRef = useMemo(
     () => ({ handlerTag: pagerPanGesture.handlerTag }),
     [pagerPanGesture.handlerTag]
   );
+  const nativeListConfig = useMemo(
+    () => ({
+      requireToFail: panGestureWaitRef as unknown as typeof pagerPanGesture,
+      onTouchesDown: () => {
+        'worklet';
+        headerScroll.cancel();
+      },
+    }),
+    [panGestureWaitRef, headerScroll]
+  );
 
-  // Each scroll view gets its own Native gesture. Wrapping the RN scroll view
-  // in a Native gesture is required on Android - otherwise RNGH consumes the
-  // touch at the native level and the list never scrolls inside the pan's
-  // detector region.
-  //
-  // `requireToFail: panGesture` makes the scroll wait for the pan to fail
-  // before it activates: a horizontal drag activates the pan (the pan never
-  // fails) so the list stays frozen during a page swipe (no scroll flick),
-  // while a vertical drag fails the pan quickly (failOffsetY) and the scroll
-  // takes over. Do NOT add `disallowInterruption` here - it cancels every
-  // other handler, including the tab-button taps, while the list is scrolling.
-  //
-  // These gestures MUST be hosted in a host GestureDetector by the list
-  // wrappers, not a VirtualGestureDetector. Virtually-attached Native gestures
-  // never receive touch events on Android (the handler never leaves
-  // UNDETERMINED, verified on RNGH 3.0.0), which leaves the scroll view running
-  // outside RNGH arbitration. That breaks the X-style momentum grab: touching a
-  // decelerating list makes the ScrollView intercept at ACTION_DOWN (the native
-  // fling catch) and its requestDisallowInterceptTouchEvent makes RNGH cancel
-  // every handler - including this pan - before a horizontal drag can be
-  // recognized, so mid-momentum page swipes die at touch-down. With a host
-  // detector the Native handler performs the catch inside the gesture
-  // orchestrator (where requestDisallowIntercept is ignored): the fling is
-  // aborted on touch-down and the pan survives to win the horizontal race.
-  //
-  // Android RefreshControl (SwipeRefreshLayout) conflicts with this Native
-  // wrapper (RNGH issue #1067: the spinner shows but only commits on a second
-  // touch). useAutoRefreshControl works around it by cloning the consumer's
-  // gesture-aware RefreshControl with a `block` relation on this gesture.
-  //
+  // A host Native gesture brings each scroll view into RNGH arbitration.
+  // requireToFail gives the pager first chance to recognize horizontal intent;
+  // a vertical failure releases the list. disallowInterruption would also
+  // cancel competing taps/pulls, so it is deliberately left off.
+  // Android's gesture-aware RefreshControl blocks this list gesture through
+  // useAutoRefreshControl. Host attachment is the tested adapter arrangement,
+  // not a claim that virtual Native gestures never work in RNGH 3.
   // tabCount is stable for this component's lifetime.
   const nativeListGestures: ReturnType<typeof useNativeGesture>[] = [];
   for (let i = 0; i < tabCount; i++) {
     /* eslint-disable react-hooks/rules-of-hooks */
-    nativeListGestures.push(
-      useNativeGesture({
-        requireToFail: panGestureWaitRef as unknown as typeof pagerPanGesture,
-      })
-    );
+    nativeListGestures.push(useNativeGesture(nativeListConfig));
     /* eslint-enable react-hooks/rules-of-hooks */
   }
-
-  // The custom pull pan (Android stretch mode). Engages only when the active
-  // list sits at its top; activates on a downward drag at PULL_ACTIVATION
-  // (6dp — under the pager pan's 10dp failOffsetY, so exclusivity comes from
-  // the race's offsets: the pull fails fast on horizontal or upward movement,
-  // the pager needs 15dp of horizontal travel) so paging and scrolling are
-  // untouched. Simultaneous with the list Native gestures: at offset 0 a
-  // downward drag can't scroll, but the scroll handler may still claim the
-  // touch - it must not cancel us.
-  const customPullEnabled = useSharedValue(false);
-  useAnimatedReaction(
-    () => {
-      'worklet';
-      if (!usesCustomPullSV.value) return false;
-      const i = clampTabIndex(activeIndex.value, tabCount);
-      const y = perPageScrollY[i];
-      return (y ? y.value : 1) <= 1;
-    },
-    (enabled) => {
-      'worklet';
-      customPullEnabled.value = enabled;
-    },
+  // Native handler tags and their wait relation stay fixed until remount.
+  const listNativeGestures = useMemo(
+    () => nativeListGestures,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [tabCount]
   );
 
-  const customPullPan = usePanGesture({
-    enabled: customPullEnabled,
-    activeOffsetY: PULL_ACTIVATION,
-    failOffsetY: -1,
-    failOffsetX: [-16, 16],
-    // Attached at the container root, so the pull can start anywhere on the
-    // page or its chrome (tab bar, header) — except the pinned bar, which is
-    // fixed navigation and must not drive the pull.
-    hitSlop: { top: -pinnedTotal },
-    simultaneousWith: nativeListGestures,
-    onActivate: () => {
-      'worklet';
-      isPulling.value = true;
-      cancelAnimation(scrollY);
-    },
-    onUpdate: (e) => {
-      'worklet';
-      if (!isPulling.value) return;
-      const pull = Math.max(0, e.translationY) * PULL_RESISTANCE;
-      scrollY.value = -pull;
-    },
-    onFinalize: () => {
-      'worklet';
-      if (!isPulling.value) return;
-      isPulling.value = false;
-      const pulled = -scrollY.value;
-      if (pulled <= 0) return;
-      if (refreshingHold.value) {
-        // Already refreshing - settle back onto the hold position.
-        scrollY.value = withTiming(-PULL_HOLD_OFFSET, { duration: 180 });
-      } else if (pulled >= PULL_TRIGGER_DISTANCE) {
-        refreshingHold.value = true;
-        scrollY.value = withTiming(-PULL_HOLD_OFFSET, { duration: 180 });
-        scheduleOnRN(triggerActiveRefresh);
-      } else {
-        scrollY.value = withTiming(0, { duration: 220 });
-      }
-    },
+  const customPullPan = useCustomPullGesture({
+    directionConfig,
+    headerScroll,
+    headerScrollEnabled,
+    containsHeaderTouch,
+    usesCustomPullSV,
+    activeIndex,
+    tabCount,
+    perPageScrollY,
+    scrollY,
+    isPanning,
+    isPulling,
+    refreshingHold,
+    refreshStates,
+    pinnedTotal,
+    nativeListGestures: listNativeGestures,
+    cancelScrollToTop,
+    triggerActiveRefresh,
   });
 
-  // Both pager gestures ride the root InterceptingGestureDetector's `gesture`
-  // prop as one composed race. The race adds no relations - their offsets
-  // keep them mutually exclusive, and the pull's `enabled` shared value keeps
-  // it inert outside Android stretch mode.
+  const webContentPan = useWebContentDrag({
+    directionConfig,
+    activeIndex,
+    listRefs,
+    headerScroll,
+    cancelScrollToTop,
+  });
+
+  // Both pans wait for the same direction rule before manual activation. The
+  // vertical pan scrolls chrome touches or pulls at the top on Android; the
+  // competing relation enforces ownership after the direction decision.
   const combinedPagerGestures = useCompetingGestures(
     pagerPanGesture,
-    customPullPan
-  );
-
-  // Release the indicator hold when the active tab's refresh completes.
-  useAnimatedReaction(
-    () => {
-      'worklet';
-      return refreshingHold.value;
-    },
-    (current, previous) => {
-      'worklet';
-      if (
-        previous === true &&
-        current === false &&
-        !isPulling.value &&
-        scrollY.value < 0
-      ) {
-        scrollY.value = withTiming(0, { duration: 220 });
-      }
-    }
+    webContentPan ?? customPullPan
   );
 
   return {
-    listNativeGestures: nativeListGestures,
+    listNativeGestures,
+    pagerPanGesture,
+    // Web content gets a mouse-only vertical pan; touch keeps browser pan-y.
+    // Chrome has its own vertical gesture instance, attached separately.
     pagerGestures: combinedPagerGestures,
     // The real gesture object (relations like simultaneousWith need its
     // gestureRelations — a bare { handlerTag } ref crashes RNGH's relation
@@ -738,17 +886,21 @@ interface ContainerContentProps {
   scrollToTopOffset: SharedValue<number>;
   headerHeight: SharedValue<number>;
   activeIndex: SharedValue<number>;
+  selectedIndex: number;
   pagerOffset: DerivedValue<number>;
   pillWidth: SharedValue<number>;
   pullDownBehavior: ContainerProps['pullDownBehavior'];
   onTabPress: (index: number) => void;
-  onContainerHeight: (height: number) => void;
+  onWebScrollStart: (index: number) => void;
+  webScrollRef: Ref<ComponentRef<typeof View>> | undefined;
+  onContainerLayout: (width: number, height: number) => void;
   onPinnedHeaderHeight: (height: number) => void;
   onHeaderHeight: (height: number) => void;
   collapsibleHeaderStyle: any;
   pullIndicatorStyle: any;
   pagerGestures: any;
-  screenWidth: number;
+  verticalGesture: any;
+  layoutWidth: number;
   tabCount: number;
   pagerStyle: any;
   lazy: boolean;
@@ -772,17 +924,21 @@ function ContainerContentBase({
   scrollToTopOffset,
   headerHeight,
   activeIndex,
+  selectedIndex,
   pagerOffset,
   pillWidth,
   pullDownBehavior,
   onTabPress,
-  onContainerHeight,
+  onWebScrollStart,
+  webScrollRef,
+  onContainerLayout,
   onPinnedHeaderHeight,
   onHeaderHeight,
   collapsibleHeaderStyle,
   pullIndicatorStyle,
   pagerGestures,
-  screenWidth,
+  verticalGesture,
+  layoutWidth,
   tabCount,
   pagerStyle,
   lazy,
@@ -876,7 +1032,7 @@ function ContainerContentBase({
 
   const pagerRow = (
     <Animated.View
-      style={[styles.pager, { width: screenWidth * tabCount }, pagerStyle]}
+      style={[styles.pager, { width: layoutWidth * tabCount }, pagerStyle]}
     >
       {tabs.map((tab, index) => {
         const shouldRender = !lazy || mountedTabIndices.has(index);
@@ -884,8 +1040,22 @@ function ContainerContentBase({
         return (
           <View
             key={tab.key}
-            style={[styles.page, { width: screenWidth }]}
+            style={[styles.page, { width: layoutWidth }]}
             collapsable={false}
+            accessibilityElementsHidden={index !== selectedIndex}
+            importantForAccessibility={
+              index === selectedIndex ? 'auto' : 'no-hide-descendants'
+            }
+            {...(IS_WEB
+              ? {
+                  'aria-hidden': index !== selectedIndex,
+                  'inert': index !== selectedIndex,
+                  'dataSet': { fluidTabsPage: String(index) },
+                  // RN Web does not synthesize onScrollBeginDrag. Cancel on
+                  // user input, since programmatic scroll events are ambiguous.
+                  'onPointerDown': () => onWebScrollStart(index),
+                }
+              : null)}
           >
             {shouldRender ? (
               <TabIndexContext.Provider value={index}>
@@ -898,41 +1068,43 @@ function ContainerContentBase({
     </Animated.View>
   );
 
+  const pagerHost = <View style={styles.pagerHost}>{pagerRow}</View>;
+
   return (
     <View
+      ref={webScrollRef}
       style={[styles.container, containerStyle]}
-      onLayout={(e) => onContainerHeight(e.nativeEvent.layout.height)}
+      onLayout={(e) =>
+        onContainerLayout(
+          e.nativeEvent.layout.width,
+          e.nativeEvent.layout.height
+        )
+      }
     >
-      {chrome}
-      <View style={styles.pagerHost}>
-        {IS_WEB ? (
-          <GestureDetector gesture={pagerGestures} touchAction="pan-y">
-            {pagerRow}
-          </GestureDetector>
-        ) : (
-          pagerRow
-        )}
-      </View>
+      {IS_WEB ? (
+        <GestureDetector gesture={verticalGesture} touchAction="pan-x">
+          <View style={styles.webChrome} pointerEvents="box-none">
+            {chrome}
+          </View>
+        </GestureDetector>
+      ) : (
+        chrome
+      )}
+      {IS_WEB ? (
+        <GestureDetector gesture={pagerGestures} touchAction="pan-y">
+          {pagerHost}
+        </GestureDetector>
+      ) : (
+        pagerHost
+      )}
     </View>
   );
 }
 
-// The `momentumActive`/`grabCatch` flag is mirrored into React state
-// (`momentumFailActive`) so the pager pan can be handed plain-number
-// `failOffsetY` offsets without tripping Reanimated's read-during-render
-// warning. That state flips on every fling's momentum begin/end, so without a
-// memo boundary the whole pager + list subtree reconciles on each up/down
-// flick, stuttering the header. ContainerContent is therefore memoized.
-//
-// `pagerGestures` is the one prop that legitimately changes on that toggle:
-// RNGH rebuilds the composed gesture object every render (its config is an
-// inline object) and the relaxed `failOffsetYDistance` is folded into it on a
-// grab-catch. That reconfiguration is applied to the *native* handler by the
-// gesture hooks' own effects in ContainerImpl (setGestureHandlerConfig), not by
-// this detector re-rendering — the underlying handler tags are stable for the
-// component's lifetime. Comparing `pagerGestures` by `handlerTags` lets the
-// memo bail on the per-fling momentum toggle (killing the stutter) while the
-// intercept-and-swipe feature keeps reconfiguring through ContainerImpl.
+// Avoid reconciling the content solely for a native gesture config update.
+// Native gestures attach at ContainerImpl's root and their hooks update the
+// handler configuration there. The content only hosts a detector on web,
+// where its complete gesture object must participate in the comparison.
 function arePropsEqual(
   prev: ContainerContentProps,
   next: ContainerContentProps
@@ -940,24 +1112,12 @@ function arePropsEqual(
   const prevRecord = prev as unknown as Record<string, unknown>;
   const nextRecord = next as unknown as Record<string, unknown>;
   for (const key in nextRecord) {
-    if (key === 'pagerGestures') continue;
+    if ((key === 'pagerGestures' || key === 'verticalGesture') && !IS_WEB)
+      continue;
     if (!Object.is(prevRecord[key], nextRecord[key])) return false;
   }
   for (const key in prevRecord) {
     if (!(key in nextRecord)) return false;
-  }
-  const prevTags: unknown = prev.pagerGestures?.handlerTags;
-  const nextTags: unknown = next.pagerGestures?.handlerTags;
-  if (prevTags === nextTags) return true;
-  if (
-    !Array.isArray(prevTags) ||
-    !Array.isArray(nextTags) ||
-    prevTags.length !== nextTags.length
-  ) {
-    return prev.pagerGestures === next.pagerGestures;
-  }
-  for (let i = 0; i < prevTags.length; i++) {
-    if (prevTags[i] !== nextTags[i]) return false;
   }
   return true;
 }
@@ -966,13 +1126,16 @@ const ContainerContent = memo(ContainerContentBase, arePropsEqual);
 
 function useTabNavigation({
   controlledIndex,
+  lastNotifiedIndex,
   containerRef,
   tabCount,
   activeIndex,
   pageWidth,
   translateX,
+  isPanning,
   reduceMotionSV,
   syncLists,
+  alignList,
   perPageScrollY,
   scrollY,
   scrollToTopIndex,
@@ -980,17 +1143,21 @@ function useTabNavigation({
   cancelScrollToTop,
   headerHeight,
   listRefs,
+  listMounted,
   scrollToTopOnTabPress,
   handleIndexChange,
 }: {
   controlledIndex: number | undefined;
+  lastNotifiedIndex: RefObject<number | undefined>;
   containerRef: Ref<TabsRef>;
   tabCount: number;
   activeIndex: SharedValue<number>;
   pageWidth: SharedValue<number>;
   translateX: SharedValue<number>;
+  isPanning: SharedValue<boolean>;
   reduceMotionSV: SharedValue<boolean>;
   syncLists: (excludeIndex?: number) => void;
+  alignList: (index: number, target: number) => void;
   perPageScrollY: SharedValue<number>[];
   scrollY: SharedValue<number>;
   scrollToTopIndex: SharedValue<number>;
@@ -998,113 +1165,91 @@ function useTabNavigation({
   cancelScrollToTop: () => void;
   headerHeight: SharedValue<number>;
   listRefs: AnimatedRef<any>[];
+  listMounted: SharedValue<boolean>[];
   scrollToTopOnTabPress: boolean;
   handleIndexChange: (index: number, notifyParent?: boolean) => void;
 }) {
-  const runSyncListsNow = useCallback(
-    (excludeIndex: number = -1) => {
-      if (Platform.OS === 'web') {
-        syncLists(excludeIndex);
-      } else {
-        const sync = () => {
-          'worklet';
-          syncLists(excludeIndex);
-        };
-        runOnUISync(sync);
-      }
-    },
-    [syncLists]
-  );
-
-  const runPrepareForIndexChangeNow = useCallback(
+  const prepareForIndexChange = useCallback(
     (currentIndex: number, nextIndex: number) => {
-      const prepare = () => {
-        'worklet';
-        // Clamped for the same reason as syncLists: never propagate a
-        // synthetic negative pull offset into the pages' scroll state.
-        const sourceY = Math.max(0, scrollY.value);
-        const collapseRange = headerHeight.value;
+      'worklet';
+      // Clamped for the same reason as syncLists: never propagate a
+      // synthetic negative pull offset into the pages' scroll state.
+      const sourceY = Math.max(0, scrollY.value);
+      const collapseRange = headerHeight.value;
 
-        for (let i = 0; i < listRefs.length; i++) {
-          const ref = listRefs[i];
-          const y = perPageScrollY[i];
-          if (!ref || !y) continue;
+      for (let i = 0; i < listRefs.length; i++) {
+        const ref = listRefs[i];
+        const y = perPageScrollY[i];
+        if (!ref || !y) continue;
 
-          let target: number | null = null;
-          if (sourceY < collapseRange) {
-            target = sourceY;
-          } else if (y.value < collapseRange) {
-            target = collapseRange;
-          } else if (i === currentIndex) {
-            target = y.value;
-          }
-
-          if (
-            target !== null &&
-            (target !== y.value || i === currentIndex) &&
-            scrollToMountedRef(ref, 0, target, false)
-          ) {
-            y.value = target;
-          }
+        let target: number | null = null;
+        if (sourceY < collapseRange) {
+          target = sourceY;
+        } else if (y.value < collapseRange) {
+          target = collapseRange;
+        } else if (i === currentIndex) {
+          target = y.value;
         }
 
-        const nextY = perPageScrollY[nextIndex];
-        if (nextY) scrollY.value = nextY.value;
-      };
-      if (Platform.OS === 'web') {
-        prepare();
-      } else {
-        runOnUISync(prepare);
+        if (target !== null && (target !== y.value || i === currentIndex)) {
+          alignList(i, target);
+        }
       }
+
+      const nextY = perPageScrollY[nextIndex];
+      if (nextY) scrollY.value = nextY.value;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scrollY, headerHeight, tabCount]
+    [alignList, scrollY, headerHeight, listRefs, perPageScrollY]
   );
 
   const goToIndex = useCallback(
     (index: number, animated: boolean = true, notifyParent: boolean = true) => {
       const clamped = clampTabIndex(index, tabCount);
-      const current = activeIndex.value;
-      const distance = Math.abs(clamped - current);
-      const target = -clamped * pageWidth.value;
-
-      const cancelTopScroll = () => {
+      // Start navigation in one UI task. Separate RN-side shared-value writes
+      // can interleave with a gesture or a frame from the previous animation.
+      const navigate = () => {
         'worklet';
+        const current = activeIndex.value;
+        const distance = Math.abs(clamped - current);
+        const target = -clamped * pageWidth.value;
         cancelScrollToTop();
+        // A release/cancel event from an older swipe must not replace this
+        // tap/imperative animation with a second spring to another target.
+        isPanning.value = false;
+        cancelAnimation(translateX);
+        activeIndex.value = clamped;
+        prepareForIndexChange(current, clamped);
+
+        if (!animated || reduceMotionSV.value) {
+          translateX.value = target;
+          syncLists(clamped);
+        } else {
+          const duration =
+            SNAP_DURATION_BASE + distance * SNAP_DURATION_PER_PAGE;
+          translateX.value = withTiming(
+            target,
+            { duration, easing: Easing.out(Easing.quad) },
+            (finished) => {
+              if (!finished) return;
+              syncLists(clamped);
+            }
+          );
+        }
       };
       if (Platform.OS === 'web') {
-        cancelTopScroll();
+        navigate();
       } else {
-        runOnUISync(cancelTopScroll);
-      }
-
-      activeIndex.value = clamped;
-      cancelAnimation(translateX);
-      runPrepareForIndexChangeNow(current, clamped);
-
-      if (!animated || reduceMotionSV.value) {
-        translateX.value = target;
-        runSyncListsNow(clamped);
-      } else {
-        const duration = SNAP_DURATION_BASE + distance * SNAP_DURATION_PER_PAGE;
-        translateX.value = withTiming(
-          target,
-          { duration, easing: Easing.out(Easing.quad) },
-          () => {
-            'worklet';
-            syncLists(clamped);
-          }
-        );
+        runOnUISync(navigate);
       }
       handleIndexChange(clamped, notifyParent);
     },
     [
       activeIndex,
       translateX,
+      isPanning,
       pageWidth,
       syncLists,
-      runSyncListsNow,
-      runPrepareForIndexChangeNow,
+      prepareForIndexChange,
       handleIndexChange,
       tabCount,
       reduceMotionSV,
@@ -1112,60 +1257,61 @@ function useTabNavigation({
     ]
   );
 
-  const scrollActiveTabToTop = useCallback(
-    () => {
-      const scrollTop = () => {
-        'worklet';
-        const i = clampTabIndex(activeIndex.value, tabCount);
-        const ref = listRefs[i];
-        const y = perPageScrollY[i];
-        if (!ref || !y) return;
-        scrollToMountedRef(ref, 0, y.value, false);
-        cancelAnimation(scrollToTopOffset);
-        cancelAnimation(scrollY);
-        const currentY = Math.max(0, y.value);
-        scrollToTopIndex.value = i;
-        if (currentY <= 0 || reduceMotionSV.value) {
-          scrollToTopOffset.value = 0;
-          y.value = 0;
-          if (activeIndex.value === i) scrollY.value = 0;
-          scrollToMountedRef(ref, 0, 0, false);
-          scrollToTopIndex.value = -1;
-          return;
-        }
-        scrollToTopOffset.value = currentY;
-        if (activeIndex.value === i) scrollY.value = currentY;
-        const timing = {
-          duration: SCROLL_TO_TOP_DURATION,
-          easing: Easing.out(Easing.quad),
-        };
-        scrollToTopOffset.value = withTiming(0, timing, (finished) => {
-          if (!finished || scrollToTopIndex.value !== i) return;
-          y.value = 0;
-          if (activeIndex.value === i) scrollY.value = 0;
-          scrollToMountedRef(ref, 0, 0, false);
-          scrollToTopIndex.value = -1;
-        });
-        if (activeIndex.value === i) {
-          scrollY.value = withTiming(0, timing);
-        }
-      };
-      if (Platform.OS === 'web') {
-        scrollTop();
-      } else {
-        runOnUISync(scrollTop);
+  const scrollActiveTabToTop = useCallback(() => {
+    const scrollTop = () => {
+      'worklet';
+      cancelScrollToTop();
+      const i = clampTabIndex(activeIndex.value, tabCount);
+      const ref = listRefs[i];
+      const y = perPageScrollY[i];
+      if (!ref || !y || !listMounted[i]?.value) return;
+      scrollToMountedRef(ref, listMounted[i], 0, y.value, false);
+      cancelAnimation(scrollToTopOffset);
+      cancelAnimation(scrollY);
+      const currentY = Math.max(0, y.value);
+      scrollToTopIndex.value = i;
+      if (currentY <= 0 || reduceMotionSV.value) {
+        scrollToTopOffset.value = 0;
+        y.value = 0;
+        if (activeIndex.value === i) scrollY.value = 0;
+        scrollToMountedRef(ref, listMounted[i], 0, 0, false);
+        scrollToTopIndex.value = -1;
+        return;
       }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      tabCount,
-      activeIndex,
-      scrollY,
-      scrollToTopIndex,
-      scrollToTopOffset,
-      reduceMotionSV,
-    ]
-  );
+      scrollToTopOffset.value = currentY;
+      if (activeIndex.value === i) scrollY.value = currentY;
+      const timing = {
+        duration: SCROLL_TO_TOP_DURATION,
+        easing: Easing.out(Easing.quad),
+      };
+      scrollToTopOffset.value = withTiming(0, timing, (finished) => {
+        if (!finished || scrollToTopIndex.value !== i) return;
+        y.value = 0;
+        if (activeIndex.value === i) scrollY.value = 0;
+        scrollToMountedRef(ref, listMounted[i], 0, 0, false);
+        scrollToTopIndex.value = -1;
+      });
+      if (activeIndex.value === i) {
+        scrollY.value = withTiming(0, timing);
+      }
+    };
+    if (Platform.OS === 'web') {
+      scrollTop();
+    } else {
+      runOnUISync(scrollTop);
+    }
+  }, [
+    tabCount,
+    activeIndex,
+    listRefs,
+    listMounted,
+    perPageScrollY,
+    scrollY,
+    scrollToTopIndex,
+    scrollToTopOffset,
+    reduceMotionSV,
+    cancelScrollToTop,
+  ]);
 
   const handleTabPress = useCallback(
     (index: number) => {
@@ -1187,13 +1333,27 @@ function useTabNavigation({
     ]
   );
 
-  useEffect(() => {
-    if (controlledIndex == null) return;
+  const previousControlledIndex = useRef(controlledIndex);
+  useLayoutEffect(() => {
+    const previous = previousControlledIndex.current;
+    previousControlledIndex.current = controlledIndex;
+    // A changed callback/config can rerun this effect without a new command.
+    if (Object.is(previous, controlledIndex)) return;
+    if (controlledIndex == null) {
+      lastNotifiedIndex.current = undefined;
+      return;
+    }
     const clamped = clampTabIndex(controlledIndex, tabCount);
+    const isAcknowledgement =
+      previous != null && clamped === lastNotifiedIndex.current;
+    lastNotifiedIndex.current = undefined;
+    // React may acknowledge tab 3 after a second swipe already targets tab 4.
+    // That echo must not cancel the newer gesture or its settling animation.
+    if (isAcknowledgement) return;
     if (clamped !== clampTabIndex(activeIndex.value, tabCount)) {
       goToIndex(clamped, true, false);
     }
-  }, [controlledIndex, tabCount, activeIndex, goToIndex]);
+  }, [controlledIndex, tabCount, activeIndex, goToIndex, lastNotifiedIndex]);
 
   useImperativeHandle(
     containerRef,
@@ -1210,24 +1370,30 @@ function useTabNavigation({
 
 function useContainerMeasurements({
   pinnedHeaderHeight,
+  topInsetOverride,
   hasPinnedHeader,
+  hasHeader,
   estimatedHeaderHeight,
   minPageContentHeight,
   screenHeight,
   tabBarHeight,
   swipeGestureTopInset,
-  headerHeight,
 }: {
   pinnedHeaderHeight: ContainerProps['pinnedHeaderHeight'];
+  topInsetOverride: ContainerProps['topInset'];
   hasPinnedHeader: boolean;
+  hasHeader: boolean;
   estimatedHeaderHeight: number;
   minPageContentHeight: ContainerProps['minPageContentHeight'];
   screenHeight: number;
   tabBarHeight: number;
   swipeGestureTopInset: ContainerProps['swipeGestureTopInset'];
-  headerHeight: SharedValue<number>;
 }) {
-  const { top: topInset, bottom: bottomInset } = useSafeAreaInsets();
+  const { top: safeTopInset, bottom: bottomInset } = useSafeAreaInsets();
+  const topInset =
+    topInsetOverride != null && Number.isFinite(topInsetOverride)
+      ? Math.max(0, topInsetOverride)
+      : safeTopInset;
   const [measuredPinnedTotal, setMeasuredPinnedTotal] = useState(0);
   const pinnedTotal =
     pinnedHeaderHeight != null
@@ -1236,38 +1402,35 @@ function useContainerMeasurements({
         ? Math.max(measuredPinnedTotal, topInset)
         : topInset;
   const resolvedPinnedHeaderHeight = Math.max(0, pinnedTotal - topInset);
-  const [measuredHeaderHeight, setMeasuredHeaderHeight] = useState(
+  const [lastHeaderHeight, setMeasuredHeaderHeight] = useState(
     estimatedHeaderHeight
   );
+  const measuredHeaderHeight = hasHeader ? lastHeaderHeight : 0;
   const [measuredContainerHeight, setMeasuredContainerHeight] = useState(0);
-
-  useEffect(() => {
-    if (estimatedHeaderHeight > 0 && headerHeight.value === 0) {
-      headerHeight.value = estimatedHeaderHeight;
-    }
-    if (estimatedHeaderHeight > 0 && measuredHeaderHeight === 0) {
-      setMeasuredHeaderHeight(estimatedHeaderHeight);
-    }
-  }, [estimatedHeaderHeight, headerHeight, measuredHeaderHeight]);
+  const [measuredContainerWidth, setMeasuredContainerWidth] = useState(0);
 
   const resolvedMinContentHeight =
     minPageContentHeight ??
     (measuredContainerHeight || screenHeight) + measuredHeaderHeight;
   const resolvedSwipeGestureTopInset =
     swipeGestureTopInset === 'auto'
-      ? pinnedTotal + measuredHeaderHeight + tabBarHeight
+      ? pinnedTotal + tabBarHeight
       : Math.max(0, swipeGestureTopInset ?? 0);
-  const pagerPanHitSlop = {
-    left: -EDGE_SWIPE_MARGIN,
-    ...(resolvedSwipeGestureTopInset > 0
-      ? {
-          top: -Math.min(
-            Math.max(0, screenHeight - 1),
-            resolvedSwipeGestureTopInset
-          ),
-        }
-      : null),
-  };
+  const availableHeight = measuredContainerHeight || screenHeight;
+  const pagerPanHitSlop = useMemo(
+    () => ({
+      left: -EDGE_SWIPE_MARGIN,
+      ...(resolvedSwipeGestureTopInset > 0
+        ? {
+            top: -Math.min(
+              Math.max(0, availableHeight - 1),
+              resolvedSwipeGestureTopInset
+            ),
+          }
+        : null),
+    }),
+    [availableHeight, resolvedSwipeGestureTopInset]
+  );
 
   return {
     topInset,
@@ -1276,6 +1439,8 @@ function useContainerMeasurements({
     resolvedPinnedHeaderHeight,
     setMeasuredHeaderHeight,
     setMeasuredContainerHeight,
+    setMeasuredContainerWidth,
+    measuredContainerWidth,
     setMeasuredPinnedTotal,
     measuredHeaderHeight,
     resolvedMinContentHeight,
@@ -1292,6 +1457,7 @@ function useContainerAnimatedStyles({
   tabCount,
   translateX,
   usesCustomPullSV,
+  refreshStates,
   pullDownBehavior,
   headerHeight,
 }: {
@@ -1303,6 +1469,7 @@ function useContainerAnimatedStyles({
   tabCount: number;
   translateX: SharedValue<number>;
   usesCustomPullSV: SharedValue<boolean>;
+  refreshStates: SharedValue<RefreshTabState[]>;
   pullDownBehavior: ContainerProps['pullDownBehavior'];
   headerHeight: SharedValue<number>;
 }) {
@@ -1317,8 +1484,12 @@ function useContainerAnimatedStyles({
       scrollToTopOffset.value
     );
     const reveal = interpolate(-offset, [0, PULL_HOLD_OFFSET], [0, 1], 'clamp');
+    const refresh = refreshStates.value[activeIndex.value];
     return {
-      opacity: reveal,
+      opacity:
+        refresh?.canRefresh || refresh?.refreshing || refresh?.pending
+          ? reveal
+          : 0,
       transform: [{ scale: 0.6 + 0.4 * reveal }],
     };
   });
@@ -1400,7 +1571,7 @@ function usePagerOffset({
       'worklet';
       pagerOffset.value = offset;
     },
-    [tabCount]
+    Platform.OS === 'web' ? [tabCount] : undefined
   );
 
   return pagerOffset;
@@ -1415,6 +1586,7 @@ function ContainerImpl(props: ContainerImplProps) {
     renderHeader,
     renderPinnedHeader,
     pinnedHeaderHeight,
+    topInset: topInsetOverride,
     tabBarHeight = DEFAULT_TAB_BAR_HEIGHT,
     initialIndex = 0,
     index: controlledIndex,
@@ -1425,7 +1597,8 @@ function ContainerImpl(props: ContainerImplProps) {
     swipeEnabled = true,
     swipeActivationDistance = DEFAULT_SWIPE_ACTIVATION,
     swipeFailDistance = DEFAULT_SWIPE_FAIL,
-    momentumSwipeFailDistance = DEFAULT_MOMENTUM_SWIPE_FAIL,
+    swipeDirectionRatio = DEFAULT_SWIPE_DIRECTION_RATIO,
+    headerScrollEnabled = true,
     swipeGestureTopInset = 'auto',
     springConfig,
     minPageContentHeight,
@@ -1436,13 +1609,13 @@ function ContainerImpl(props: ContainerImplProps) {
   } = props;
 
   const tabCount = tabs.length;
-  const startIndex = controlledIndex ?? initialIndex;
+  const startIndex = clampTabIndex(controlledIndex ?? initialIndex, tabCount);
   const resolvedLazyPreloadDistance = Math.max(
     0,
-    Math.floor(lazyPreloadDistance)
+    Number.isFinite(lazyPreloadDistance) ? Math.floor(lazyPreloadDistance) : 1
   );
 
-  const headerHeight = useSharedValue(estimatedHeaderHeight);
+  const headerHeight = useSharedValue(renderHeader ? estimatedHeaderHeight : 0);
   const {
     topInset,
     bottomInset,
@@ -1450,24 +1623,40 @@ function ContainerImpl(props: ContainerImplProps) {
     resolvedPinnedHeaderHeight,
     setMeasuredHeaderHeight,
     setMeasuredContainerHeight,
+    setMeasuredContainerWidth,
+    measuredContainerWidth,
     setMeasuredPinnedTotal,
     measuredHeaderHeight,
     resolvedMinContentHeight,
     pagerPanHitSlop,
   } = useContainerMeasurements({
     pinnedHeaderHeight,
+    topInsetOverride,
     hasPinnedHeader: !!renderPinnedHeader,
+    hasHeader: !!renderHeader,
     estimatedHeaderHeight,
     minPageContentHeight,
     screenHeight,
     tabBarHeight,
     swipeGestureTopInset,
-    headerHeight,
   });
+  useLayoutEffect(() => {
+    // Removing the header must also remove its spacer and collapse range.
+    headerHeight.value = measuredHeaderHeight;
+  }, [headerHeight, measuredHeaderHeight]);
+  const layoutWidth = measuredContainerWidth || screenWidth;
+  const handleContainerLayout = useCallback(
+    (width: number, height: number) => {
+      setMeasuredContainerWidth(width);
+      setMeasuredContainerHeight(height);
+    },
+    [setMeasuredContainerWidth, setMeasuredContainerHeight]
+  );
 
   const scrollY = useSharedValue(0);
   const activeIndex = useSharedValue(startIndex);
-  const translateX = useSharedValue(-startIndex * screenWidth);
+  const [selectedIndex, setSelectedIndex] = useState(startIndex);
+  const translateX = useSharedValue(-startIndex * layoutWidth);
   const startX = useSharedValue(0);
   const isPanning = useSharedValue(false);
   const pillWidth = useSharedValue(0);
@@ -1484,6 +1673,13 @@ function ContainerImpl(props: ContainerImplProps) {
     ({ refreshing: boolean; onRefresh?: () => void } | null)[]
   >([]);
   const refreshingHold = useSharedValue(false);
+  const refreshStates = useSharedValue<RefreshTabState[]>(
+    Array.from({ length: tabCount }, () => ({
+      canRefresh: false,
+      refreshing: false,
+      pending: false,
+    }))
+  );
   const isPulling = useSharedValue(false);
 
   const { mountedTabIndices, mountTabsAround } = useMountedTabs({
@@ -1494,12 +1690,20 @@ function ContainerImpl(props: ContainerImplProps) {
     activeIndex,
   });
 
-  const pageWidth = useSharedValue(screenWidth);
+  const pageWidth = useSharedValue(layoutWidth);
   useEffect(() => {
-    pageWidth.value = screenWidth;
-    cancelAnimation(translateX);
-    translateX.value = -activeIndex.value * screenWidth;
-  }, [screenWidth, activeIndex, pageWidth, translateX]);
+    const resizePager = () => {
+      'worklet';
+      pageWidth.value = layoutWidth;
+      cancelAnimation(translateX);
+      translateX.value = -activeIndex.value * layoutWidth;
+      // Translation events belong to the previous layout until this finger
+      // lifts. Ignore that gesture instead of jumping back to its old origin.
+      isPanning.value = false;
+    };
+    if (IS_WEB) resizePager();
+    else runOnUISync(resizePager);
+  }, [layoutWidth, activeIndex, pageWidth, translateX, isPanning]);
 
   const reduceMotion = useReducedMotion();
   const reduceMotionSV = useSharedValue(reduceMotion);
@@ -1517,6 +1721,9 @@ function ContainerImpl(props: ContainerImplProps) {
 
   const {
     listRefs,
+    listMounted,
+    listScrollMetrics,
+    headerScroll,
     perPageScrollY,
     scrollToTopIndex,
     scrollToTopOffset,
@@ -1524,6 +1731,7 @@ function ContainerImpl(props: ContainerImplProps) {
     freezeLists,
     cancelScrollToTop,
     syncLists,
+    alignList,
   } = usePagerListState({
     tabCount,
     activeIndex,
@@ -1531,6 +1739,27 @@ function ContainerImpl(props: ContainerImplProps) {
     headerHeight,
     momentumActive,
     usesCustomPullSV,
+    reduceMotionSV,
+  });
+  const handleWebScrollStart = useCallback(
+    (index: number) => {
+      // Only used by browser event handlers; no RN/UI crossing on web.
+      if (
+        scrollToTopIndex.value === index ||
+        headerScroll.index.value === index
+      )
+        cancelScrollToTop();
+    },
+    [scrollToTopIndex, cancelScrollToTop, headerScroll]
+  );
+  const webScrollRef = useWebWheelScroll({
+    activeIndex,
+    perPageScrollY,
+    listRefs,
+    headerScroll,
+    cancelScrollToTop,
+    headerScrollEnabled,
+    reduceMotion,
   });
 
   const spring = useMemo(
@@ -1538,17 +1767,20 @@ function ContainerImpl(props: ContainerImplProps) {
     [springConfig]
   );
 
+  const lastNotifiedIndex = useRef<number | undefined>(undefined);
   const handleIndexChange = useCallback(
     (index: number, notifyParent: boolean = true) => {
+      // UI gestures can advance again before their RN callbacks are delivered.
+      // Do not publish an obsolete selection back into the controlled index.
+      if (index !== activeIndex.value) return;
+      setSelectedIndex(index);
       mountTabsAround(index);
-      // Switching tabs dismisses the pull-to-refresh hold outright, even if
-      // the landing tab reports `refreshing` — its data keeps loading, just
-      // without the indicator (the X/Instagram behavior, and what iOS's
-      // native RefreshControl does by default).
-      refreshingHold.value = false;
-      if (notifyParent) onIndexChange?.(index);
+      if (notifyParent && onIndexChange) {
+        lastNotifiedIndex.current = index;
+        onIndexChange(index);
+      }
     },
-    [mountTabsAround, onIndexChange, refreshingHold]
+    [activeIndex, mountTabsAround, onIndexChange]
   );
 
   const reportRefreshConfig = useCallback(
@@ -1557,33 +1789,59 @@ function ContainerImpl(props: ContainerImplProps) {
       config: { refreshing: boolean; onRefresh?: () => void } | null
     ) => {
       refreshConfigs.current[index] = config;
-      if (index === clampTabIndex(activeIndex.value, tabCount)) {
-        const nowRefreshing = !!config?.refreshing;
-        if (refreshingHold.value !== nowRefreshing) {
-          refreshingHold.value = nowRefreshing;
+      const canRefresh = typeof config?.onRefresh === 'function';
+      const nowRefreshing = !!config?.refreshing;
+      // Native SharedValue setters are queued. Reading and replacing this
+      // array on RN can lose registrations from sibling layout effects, or a
+      // pending request set by a UI gesture. Reconcile the whole update on UI.
+      const applyConfig = () => {
+        'worklet';
+        const next = [...refreshStates.value];
+        const wasRefreshing = !!next[index]?.refreshing;
+        next[index] = { canRefresh, refreshing: nowRefreshing, pending: false };
+        refreshStates.value = next;
+        if (index === clampTabIndex(activeIndex.value, tabCount)) {
+          if (!nowRefreshing) refreshingHold.value = false;
+          else if (!wasRefreshing) refreshingHold.value = true;
         }
-      }
+      };
+      if (IS_WEB) applyConfig();
+      else runOnUISync(applyConfig);
     },
-    [tabCount, activeIndex, refreshingHold]
+    [tabCount, activeIndex, refreshingHold, refreshStates]
   );
 
-  const triggerActiveRefresh = useCallback(() => {
-    const i = clampTabIndex(activeIndex.value, tabCount);
-    const config = refreshConfigs.current[i];
-    if (config?.onRefresh) {
-      config.onRefresh();
-    } else {
-      refreshingHold.value = false;
-    }
-  }, [tabCount, activeIndex, refreshingHold]);
+  const triggerActiveRefresh = useCallback(
+    (index: number) => {
+      // Preserve the originating tab across the asynchronous UI -> RN handoff.
+      const config = refreshConfigs.current[index];
+      if (config?.onRefresh && !config.refreshing) {
+        // The adapter always reports again after the callback's React commit,
+        // including when `refreshing` remains false or the callback throws.
+        config.onRefresh();
+      } else {
+        // The control may have changed between the UI release and RN handoff.
+        reportRefreshConfig(index, config ?? null);
+      }
+    },
+    [reportRefreshConfig]
+  );
 
-  const { listNativeGestures, pagerGestures, pullPanGesture } =
+  const { listNativeGestures, pagerGestures, pullPanGesture, pagerPanGesture } =
     usePagerGestures({
       swipeEnabled,
       swipeActivationDistance,
       swipeFailDistance,
-      momentumSwipeFailDistance,
+      swipeDirectionRatio,
+      headerScrollEnabled,
+      headerScroll,
       pagerPanHitSlop,
+      swipeGestureTopInset,
+      tabBarHeight,
+      headerHeight,
+      scrollToTopIndex,
+      scrollToTopOffset,
+      pullDownBehavior,
       pinnedTotal,
       spring,
       tabCount,
@@ -1591,6 +1849,7 @@ function ContainerImpl(props: ContainerImplProps) {
       momentumActive,
       grabCatch,
       listRefs,
+      listMounted,
       perPageScrollY,
       isPanning,
       startX,
@@ -1605,6 +1864,7 @@ function ContainerImpl(props: ContainerImplProps) {
       usesCustomPullSV,
       isPulling,
       refreshingHold,
+      refreshStates,
       triggerActiveRefresh,
     });
 
@@ -1626,19 +1886,23 @@ function ContainerImpl(props: ContainerImplProps) {
       tabCount,
       translateX,
       usesCustomPullSV,
+      refreshStates,
       pullDownBehavior,
       headerHeight,
     });
 
   const handleTabPress = useTabNavigation({
     controlledIndex,
+    lastNotifiedIndex,
     containerRef,
     tabCount,
     activeIndex,
     pageWidth,
     translateX,
+    isPanning,
     reduceMotionSV,
     syncLists,
+    alignList,
     perPageScrollY,
     scrollY,
     scrollToTopIndex,
@@ -1646,6 +1910,7 @@ function ContainerImpl(props: ContainerImplProps) {
     cancelScrollToTop,
     headerHeight,
     listRefs,
+    listMounted,
     scrollToTopOnTabPress,
     handleIndexChange,
   });
@@ -1665,17 +1930,24 @@ function ContainerImpl(props: ContainerImplProps) {
       bottomInset,
       minPageContentHeight: resolvedMinContentHeight,
       listRefs,
+      listMounted,
+      listScrollMetrics,
       perPageScrollY,
       scrollToTopIndex,
       scrollToTopOffset,
       scrollHandlers,
       listNativeGestures,
       pullPanGesture,
+      pagerPanGesture,
       pullDownBehavior,
       usesCustomPullSV,
       usesCustomPull,
       reportRefreshConfig,
     }),
+    // Shared values and per-tab refs stay stable until ContainerImpl remounts.
+    // Scroll handlers capture those stable values; gestures resolve relations
+    // by stable handler tags. Rebuilding this context for their wrapper/array
+    // identities would rerender every list on unrelated Container renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       resolvedPinnedHeaderHeight,
@@ -1709,17 +1981,21 @@ function ContainerImpl(props: ContainerImplProps) {
       scrollToTopOffset={scrollToTopOffset}
       headerHeight={headerHeight}
       activeIndex={activeIndex}
+      selectedIndex={selectedIndex}
       pagerOffset={pagerOffset}
       pillWidth={pillWidth}
       pullDownBehavior={pullDownBehavior}
       onTabPress={handleTabPress}
-      onContainerHeight={setMeasuredContainerHeight}
+      onWebScrollStart={handleWebScrollStart}
+      webScrollRef={webScrollRef}
+      onContainerLayout={handleContainerLayout}
       onPinnedHeaderHeight={setMeasuredPinnedTotal}
       onHeaderHeight={handleHeaderHeight}
       collapsibleHeaderStyle={collapsibleHeaderStyle}
       pullIndicatorStyle={pullIndicatorStyle}
       pagerGestures={pagerGestures}
-      screenWidth={screenWidth}
+      verticalGesture={pullPanGesture}
+      layoutWidth={layoutWidth}
       tabCount={tabCount}
       pagerStyle={pagerStyle}
       lazy={lazy}
@@ -1732,12 +2008,8 @@ function ContainerImpl(props: ContainerImplProps) {
       {IS_WEB ? (
         content
       ) : (
-        /* The pager/pull gestures ride the root detector itself (host-level
-           attachment spanning the whole container) so they can start anywhere
-           on the page INCLUDING the chrome overlays (tab bar, header text).
-           A host attachment is also immune to the virtual-children re-attach
-           churn that intermittently dropped touches — see the
-           detector-strategy note at the top. */
+        /* Cover both pages and overlay chrome; each pan applies its own
+           exclusion zone to decide where a gesture may start. */
         <InterceptingGestureDetector
           gesture={pagerGestures}
           touchAction="pan-y"
@@ -1751,6 +2023,14 @@ function ContainerImpl(props: ContainerImplProps) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  webChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+  },
   pinnedHeader: {
     position: 'absolute',
     top: 0,
@@ -1781,7 +2061,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 5,
   },
-  pagerHost: { flex: 1 },
+  pagerHost: { flex: 1, overflow: 'hidden' },
   // direction:'ltr' pins the pager row so the manual translateX math stays
   // valid under RTL locales (RN otherwise auto-flips row layout). It is a
   // valid Yoga style on native, but react-native-web rejects `direction` as a
@@ -1791,5 +2071,5 @@ const styles = StyleSheet.create({
     flex: 1,
     ...(Platform.OS === 'web' ? null : { direction: 'ltr' as const }),
   },
-  page: { height: '100%' },
+  page: { height: '100%', overflow: 'hidden' },
 });

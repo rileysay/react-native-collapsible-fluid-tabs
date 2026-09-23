@@ -1,4 +1,5 @@
 import {
+  clampTabIndex,
   collapseTranslateY,
   getHeaderScrollOffset,
   resolveSnapIndex,
@@ -6,6 +7,21 @@ import {
 } from '../paging';
 
 const PAGE = 300;
+
+describe('clampTabIndex', () => {
+  it('normalizes initial, controlled and imperative indices consistently', () => {
+    expect(clampTabIndex(-2, 3)).toBe(0);
+    expect(clampTabIndex(10, 3)).toBe(2);
+    expect(clampTabIndex(1.6, 3)).toBe(2);
+    expect(clampTabIndex(0.4, 3)).toBe(0);
+  });
+
+  it('keeps invalid numeric input out of layout transforms and array lookups', () => {
+    expect(clampTabIndex(NaN, 3)).toBe(0);
+    expect(clampTabIndex(Infinity, 3)).toBe(0);
+    expect(clampTabIndex(-Infinity, 3)).toBe(0);
+  });
+});
 
 describe('resolveSnapIndex', () => {
   it('stays on the current page for a small, slow drag', () => {
@@ -38,6 +54,26 @@ describe('resolveSnapIndex', () => {
   it('clamps at the first and last page', () => {
     expect(resolveSnapIndex(0, 200, 2000, PAGE, 3)).toBe(0);
     expect(resolveSnapIndex(2, -200, -2000, PAGE, 3)).toBe(2);
+  });
+
+  it('follows a fast reversal symmetrically in both directions', () => {
+    expect(resolveSnapIndex(1, -240, 1000, PAGE, 3)).toBe(0);
+    expect(resolveSnapIndex(1, 240, -1000, PAGE, 3)).toBe(2);
+  });
+
+  it('returns to the current tab when a recognized swipe is canceled', () => {
+    expect(resolveSnapIndex(1, -240, -1200, PAGE, 3, true)).toBe(1);
+    expect(resolveSnapIndex(1, 240, 1200, PAGE, 3, true)).toBe(1);
+  });
+
+  it('does not navigate before a valid page width is available', () => {
+    expect(resolveSnapIndex(1, -100, -1200, 0, 3)).toBe(1);
+    expect(resolveSnapIndex(1, -100, -1200, NaN, 3)).toBe(1);
+  });
+
+  it('normalizes the current index and keeps a single page at index zero', () => {
+    expect(resolveSnapIndex(99, 0, 0, PAGE, 3)).toBe(2);
+    expect(resolveSnapIndex(0, -240, -1200, PAGE, 1)).toBe(0);
   });
 });
 
@@ -108,5 +144,14 @@ describe('getHeaderScrollOffset', () => {
 
   it('clamps the active index into range', () => {
     expect(getHeaderScrollOffset(5, 3, pages(0, 0, 90), 90, -1, 0)).toBe(90);
+  });
+
+  it('uses a real page for fractional or invalid indices', () => {
+    expect(getHeaderScrollOffset(0.6, 3, pages(10, 120, 90), 40, -1, 0)).toBe(
+      120
+    );
+    expect(getHeaderScrollOffset(NaN, 3, pages(10, 120, 90), 40, -1, 0)).toBe(
+      10
+    );
   });
 });

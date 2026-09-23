@@ -1,9 +1,7 @@
-# Summary
+## Summary
 
 <!-- What does this PR change, and why? Link the issue it fixes if there is one. -->
 
-## Checklist
+## Testing
 
-- [ ] `yarn lint`, `yarn typecheck`, and `yarn test` pass
-- [ ] Tested in the example app on Android and/or iOS (say which)
-- [ ] README / prop docs updated if the public API changed
+<!-- Describe the checks relevant to this change and their results. Include platforms tested for interaction changes, or note anything not tested. -->

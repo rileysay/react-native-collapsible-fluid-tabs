@@ -1,88 +1,59 @@
-name: 🐛 Bug report
-description: Report a reproducible bug or regression in this library.
+name: Bug report
+description: Report a bug or regression in Fluid Tabs.
 labels: [bug]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        # Bug report
-
-        👋 Hi!
-
-        **Please fill the following carefully before opening a new issue ❗**
-        *(Your issue may be closed if it doesn't provide the required pieces of information)*
-  - type: checkboxes
-    attributes:
-      label: Before submitting a new issue
-      description: Please perform simple checks first.
-      options:
-        - label: I tested using the latest version of the library, as the bug might be already fixed.
-          required: true
-        - label: I tested using a [supported version](https://github.com/reactwg/react-native-releases/blob/main/docs/support.md) of react native.
-          required: true
-        - label: I checked for possible duplicate issues, with possible answers.
-          required: true
   - type: textarea
     id: summary
     attributes:
-      label: Bug summary
-      description: |
-        Provide a clear and concise description of what the bug is.
-        If needed, you can also provide other samples: error messages / stack traces, screenshots, gifs, etc.
+      label: What happened?
+      description: Describe what you expected and what happened instead.
     validations:
       required: true
-  - type: input
-    id: library-version
-    attributes:
-      label: Library version
-      description: What version of the library are you using?
-      placeholder: "x.x.x"
-    validations:
-      required: true
+
   - type: textarea
-    id: react-native-info
+    id: versions
     attributes:
-      label: Environment info
-      description: Run `react-native info` in your terminal and paste the results here.
-      render: shell
+      label: Package versions
+      description: Include Fluid Tabs, React Native, Reanimated, Worklets and Gesture Handler. Add your Expo SDK and list adapter version if applicable.
     validations:
       required: true
+
   - type: dropdown
-    id: reanimated-flags
-    attributes:
-      label: Reanimated staticFeatureFlags
-      description: |
-        Which flags are set in your app's `package.json`? (See the README setup step — this is the most common cause of header sync issues.)
-      options:
-        - The two from the README (ANDROID/IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS)
-        - None
-        - Other or additional flags (list them in the bug summary)
-        - Not sure
-    validations:
-      required: true
-  - type: checkboxes
     id: platforms
     attributes:
       label: Platforms affected
+      multiple: true
       options:
-        - label: Android
-        - label: iOS
-        - label: Web
+        - Android
+        - iOS
+        - Web
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the device or simulator, OS version, and whether this is a development or release build. For web, include the browser and version.
+    validations:
+      required: true
+
   - type: textarea
     id: steps-to-reproduce
     attributes:
       label: Steps to reproduce
-      description: |
-        You must provide a clear list of steps and code to reproduce the problem.
-      value: |
-        1. …
-        2. …
+      description: Describe the steps that trigger the issue. A relevant code snippet is helpful.
     validations:
       required: true
+
   - type: input
     id: reproducible-example
     attributes:
-      label: Reproducible example repository 
-      description: Please provide a link to a repository on GitHub with a reproducible example.
-    validations:
-      required: true
+      label: Reproduction link (optional)
+      description: Link to a repository or runnable example if you have one.
+
+  - type: textarea
+    id: supporting-details
+    attributes:
+      label: Logs or recordings (optional)
+      description: Add relevant error messages, stack traces, screenshots or a recording.

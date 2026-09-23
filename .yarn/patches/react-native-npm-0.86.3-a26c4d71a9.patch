@@ -1,0 +1,25 @@
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm
+index 60160efb163d91813fa2ca7ca758b51afcf261e1..5f7f4ad45f848267b63ab011eca2573819502b69 100644
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm
+@@ -92,7 +92,8 @@ using namespace facebook::react;
+   const auto &oldConcreteProps = static_cast<const PullToRefreshViewProps &>(*_props);
+   const auto &newConcreteProps = static_cast<const PullToRefreshViewProps &>(*props);
+ 
+-  if (_recycled || newConcreteProps.tintColor != oldConcreteProps.tintColor) {
++  // Initial tint is applied in _attach, after UIKit installs the refresh control.
++  if (_scrollViewComponentView && (_recycled || newConcreteProps.tintColor != oldConcreteProps.tintColor)) {
+     _refreshControl.tintColor = RCTUIColorFromSharedColor(newConcreteProps.tintColor);
+   }
+ 
+@@ -207,6 +208,10 @@ using namespace facebook::react;
+   if (@available(macCatalyst 13.1, *)) {
+     _scrollViewComponentView.scrollView.refreshControl = _refreshControl;
+ 
++    // Apply tint after attachment to address the reported missing pull haptic.
++    const auto &concreteProps = static_cast<const PullToRefreshViewProps &>(*_props);
++    _refreshControl.tintColor = RCTUIColorFromSharedColor(concreteProps.tintColor);
++
+     // This ensures that layoutSubviews is called. Without this, recycled instances won't refresh on mount
+     [self setNeedsLayout];
+   }

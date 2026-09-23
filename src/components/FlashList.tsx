@@ -6,14 +6,15 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { useTabIndex, useTabsContext } from '../context';
 import { FOOTER_GAP } from '../constants';
+import { renderListComponent } from '../utils/renderListComponent';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
+import { useTrackedScrollRef } from './useTrackedScrollRef';
+import { useListScrollMetrics } from './useListScrollMetrics';
 
 // On web the browser scroll view should stay a plain DOM scroller; wrapping it
 // in a Native GestureDetector steals horizontal pointer drags from the pager.
 const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
-// Host detector, NOT VirtualGestureDetector: virtual Native gestures get no
-// touch events on Android, which kills the mid-momentum page swipe. See the
-// listNativeGestures note in Container.tsx.
+// Host the list's Native gesture on its scrollable component.
 const ListDetector = GestureDetector;
 
 // @shopify/flash-list is an optional peer: the require lives in a try/catch so
@@ -45,6 +46,18 @@ function TabsFlashListInner<T>(
   props: TabsFlashListProps<T>,
   forwardedRef: React.Ref<FlashListRef<T>>
 ) {
+  const {
+    onRefresh,
+    refreshing,
+    progressViewOffset,
+    minContentHeight,
+    onScrollBeginDrag,
+    onLayout,
+    onContentSizeChange,
+    onMomentumScrollBegin,
+    onMomentumScrollEnd,
+    ...listProps
+  } = props;
   if (!AnimatedFlashList) {
     throw new Error(
       '[collapsible-fluid-tabs] Tabs.FlashList requires the optional peer dependency @shopify/flash-list. Install it with: npm install @shopify/flash-list'
@@ -53,8 +66,15 @@ function TabsFlashListInner<T>(
   const FlashListComponent = AnimatedFlashList;
   const ctx = useTabsContext();
   const index = useTabIndex();
+  const scrollMetrics = useListScrollMetrics(ctx.listScrollMetrics[index]!, {
+    onLayout,
+    onContentSizeChange,
+    scrollEnabled: props.scrollEnabled,
+    decelerationRate: props.decelerationRate,
+  });
   const {
     listRefs,
+    listMounted,
     listNativeGestures,
     scrollHandlers,
     headerHeight,
@@ -73,14 +93,15 @@ function TabsFlashListInner<T>(
   // scroll view inside `renderScrollComponent` below so FlashList participates
   // in sync too (otherwise switching to this tab shows the un-scrolled header
   // spacer as a blank gap until the first touch).
-  const listRef = listRefs[index];
+  const listRef = useTrackedScrollRef(listRefs[index], listMounted[index]);
   // Reuse the same UI-thread scrollHandler the Container created for every
   // tab. Driving scrollY on the UI thread (not via a JS onScroll callback) is
   // what keeps the collapsing header glued to the list under heavy scroll.
   const scrollHandler = scrollHandlers[index];
   const refreshControl = useAutoRefreshControl(
     props.refreshControl,
-    nativeGesture
+    nativeGesture,
+    { onRefresh, refreshing, progressViewOffset }
   );
 
   useImperativeHandle(forwardedRef, () => flashRef.current!, []);
@@ -102,24 +123,23 @@ function TabsFlashListInner<T>(
     () => (
       <>
         <Animated.View style={headerSpacerStyle} />
-        {renderInjected(userListHeader)}
+        {renderListComponent(userListHeader)}
       </>
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userListHeader]
+    [headerSpacerStyle, userListHeader]
   );
 
   const ListFooterComponent = useMemo(
     () => (
       <>
-        {renderInjected(userListFooter)}
+        {renderListComponent(userListFooter)}
         <View style={{ height: footerSpacerHeight }} />
       </>
     ),
     [userListFooter, footerSpacerHeight]
   );
 
-  const minHeight = props.minContentHeight ?? minPageContentHeight;
+  const minHeight = minContentHeight ?? minPageContentHeight;
   const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
 
   // FlashList v2 nests its real scroll view inside an outer flex wrapper View,
@@ -142,17 +162,21 @@ function TabsFlashListInner<T>(
         // Fan the scroller node out to both refs: FlashList's own scrollViewRef
         // (so it can measure / drive scrolling) and the Container's animated ref
         // (so reanimated `scrollTo` can sync this page like the others).
-        const setRef = (node: unknown) => {
-          if (typeof flashScrollRef === 'function') flashScrollRef(node);
-          else if (flashScrollRef) {
-            (flashScrollRef as React.MutableRefObject<unknown>).current = node;
-          }
-          if (typeof listRef === 'function') {
-            (listRef as (n: unknown) => void)(node);
-          } else if (listRef) {
-            (listRef as React.MutableRefObject<unknown>).current = node;
-          }
-        };
+        const setRef = React.useCallback(
+          (node: unknown) => {
+            if (typeof flashScrollRef === 'function') flashScrollRef(node);
+            else if (flashScrollRef) {
+              (flashScrollRef as React.MutableRefObject<unknown>).current =
+                node;
+            }
+            if (typeof listRef === 'function') {
+              (listRef as (n: unknown) => void)(node);
+            } else if (listRef) {
+              (listRef as React.MutableRefObject<unknown>).current = node;
+            }
+          },
+          [flashScrollRef]
+        );
         const scrollView = <RNScrollView {...scrollProps} ref={setRef} />;
 
         if (USE_DIRECT_WEB_SCROLL) return scrollView;
@@ -164,16 +188,22 @@ function TabsFlashListInner<T>(
     [nativeGesture, listRef]
   );
 
+  // Append user momentum callbacks after onScroll so Reanimated's generated
+  // listeners do not replace them. Omit absent callbacks to keep native events on.
   return (
     <FlashListComponent
-      {...(props as FlashListProps<T>)}
+      {...listProps}
       ref={flashRef}
       refreshControl={refreshControl}
       onScroll={scrollHandler}
+      {...(onScrollBeginDrag ? { onScrollBeginDrag } : {})}
+      {...(onMomentumScrollBegin ? { onMomentumScrollBegin } : {})}
+      {...(onMomentumScrollEnd ? { onMomentumScrollEnd } : {})}
       scrollEventThrottle={1}
+      {...scrollMetrics}
       overScrollMode={props.overScrollMode ?? 'never'}
-      directionalLockEnabled
-      nestedScrollEnabled
+      directionalLockEnabled={props.directionalLockEnabled ?? true}
+      nestedScrollEnabled={props.nestedScrollEnabled ?? true}
       showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}
@@ -181,15 +211,6 @@ function TabsFlashListInner<T>(
       renderScrollComponent={renderScrollComponent}
     />
   );
-}
-
-function renderInjected(node: unknown): React.ReactNode {
-  if (!node) return null;
-  if (typeof node === 'function') {
-    const Comp = node as React.ComponentType;
-    return <Comp />;
-  }
-  return node as React.ReactNode;
 }
 
 export const FlashList = forwardRef(TabsFlashListInner) as <T>(

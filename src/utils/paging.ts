@@ -5,8 +5,15 @@
 
 /** How far ahead of the release point a flick is projected, in seconds. */
 const PROJECTION = 0.12;
-/** Velocity (px/s) above which a flick flips the page regardless of distance. */
+/** Velocity (points/s) above which a flick flips the page regardless of distance. */
 const FLICK_VELOCITY = 800;
+
+/** Normalize public indices before indexing arrays or positioning the pager. */
+export function clampTabIndex(index: number, tabCount: number): number {
+  'worklet';
+  const finiteIndex = Number.isFinite(index) ? index : 0;
+  return Math.max(0, Math.min(Math.round(finiteIndex), tabCount - 1));
+}
 
 /**
  * Decide which page to land on after a horizontal pan release. A page flips
@@ -18,17 +25,33 @@ export function resolveSnapIndex(
   translationX: number,
   velocityX: number,
   pageWidth: number,
-  tabCount: number
+  tabCount: number,
+  canceled: boolean = false
 ): number {
   'worklet';
+  const index = clampTabIndex(currentIndex, tabCount);
+  if (
+    canceled ||
+    tabCount <= 1 ||
+    !Number.isFinite(pageWidth) ||
+    pageWidth <= 0
+  ) {
+    return index;
+  }
+
+  // A fast reversal follows the release velocity in either direction. Checking
+  // projected distance first made identical mirrored flicks behave differently.
+  if (Math.abs(velocityX) > FLICK_VELOCITY) {
+    return clampTabIndex(index + (velocityX < 0 ? 1 : -1), tabCount);
+  }
   const projected = translationX + velocityX * PROJECTION;
-  if (projected < -pageWidth / 4 || velocityX < -FLICK_VELOCITY) {
-    return Math.min(currentIndex + 1, tabCount - 1);
+  if (projected < -pageWidth / 4) {
+    return Math.min(index + 1, tabCount - 1);
   }
-  if (projected > pageWidth / 4 || velocityX > FLICK_VELOCITY) {
-    return Math.max(currentIndex - 1, 0);
+  if (projected > pageWidth / 4) {
+    return Math.max(index - 1, 0);
   }
-  return currentIndex;
+  return index;
 }
 
 /**
@@ -88,7 +111,7 @@ export function getHeaderScrollOffset(
 ): number {
   'worklet';
   if (tabCount <= 0) return readFallbackScrollOffset(fallbackScrollY);
-  const i = Math.max(0, Math.min(activeIndex, tabCount - 1));
+  const i = clampTabIndex(activeIndex, tabCount);
   if (scrollToTopIndex === i) return scrollToTopOffset;
   const fallback = readFallbackScrollOffset(fallbackScrollY);
   const pageY = perPageScrollY[i];

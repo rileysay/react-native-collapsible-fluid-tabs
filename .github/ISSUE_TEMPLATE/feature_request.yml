@@ -1,30 +1,17 @@
 name: Feature request
-description: Suggest an addition or improvement
+description: Suggest an addition or improvement to Fluid Tabs.
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
       label: What problem would this solve?
-      description: Describe the use case, not just the solution - it may already be possible.
-      placeholder: My designs need an underline-style tab indicator instead of the pill...
+      description: Describe your use case and what is missing.
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed API or behavior
-      description: If you have a shape in mind (a prop, a component, a hook), sketch it.
-      placeholder: |
-        <Tabs.Container snapThreshold={0.5}>
-    validations:
-      required: false
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: What are you doing instead today?
-      description: Workarounds you've tried, or other libraries that have this.
-    validations:
-      required: false
+      label: Proposed solution (optional)
+      description: Describe the behavior or API you have in mind, and any alternatives you have tried.

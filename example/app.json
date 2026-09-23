@@ -3,17 +3,39 @@
     "name": "CollapsibleFluidTabs Example",
     "slug": "react-native-collapsible-fluid-tabs-example",
     "version": "1.0.0",
+    "scheme": "collapsiblefluidtabs",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+    "experiments": {
+      "typedRoutes": true,
+      "baseUrl": "/demo"
     },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          }
+        }
+      ],
+      "expo-router"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "collapsiblefluidtabs.example"
+      "bundleIdentifier": "collapsiblefluidtabs.example",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,6 +48,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c65ea9ca-c322-4bef-b409-d21b56be58e1"
+      }
+    },
+    "owner": "rileysk3"
   }
 }

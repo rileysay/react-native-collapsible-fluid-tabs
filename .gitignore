@@ -71,6 +71,9 @@ android/keystores/debug.keystore
 
 # Expo
 .expo/
+example/android/
+example/ios/
+example/dist/
 
 # Turborepo
 .turbo/
@@ -87,3 +90,7 @@ nitrogen/
 
 # npm pack output
 *.tgz
+
+# Local browser verification artifacts
+/.playwright-cli/
+/output/playwright/

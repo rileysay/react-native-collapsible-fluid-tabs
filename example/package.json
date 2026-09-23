@@ -1,7 +1,7 @@
 {
   "name": "react-native-collapsible-fluid-tabs-example",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "expo-router/entry",
   "reanimated": {
     "staticFeatureFlags": {
       "ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS": true,
@@ -9,36 +9,52 @@
     }
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "build:ios": "xcodebuild ONLY_ACTIVE_ARCH=YES -workspace ios/CollapsibleFluidTabsExample.xcworkspace -UseNewBuildSystem=YES -scheme CollapsibleFluidTabsExample -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build -quiet",
     "build:android": "cd android && ./gradlew assembleDebug -DtestBuildType=debug -Dorg.gradle.jvmargs=-Xmx4g",
     "build:web": "expo export --platform web"
   },
   "dependencies": {
-    "@legendapp/list": "^3.2.0",
-    "@shopify/flash-list": "2.3.1",
-    "expo": "~56.0.0",
-    "expo-status-bar": "~56.0.4",
+    "@babel/runtime": "^7.29.7",
+    "@legendapp/list": "^3.3.11",
+    "@shopify/flash-list": "2.3.2",
+    "expo": "~57.0.20",
+    "expo-build-properties": "~57.0.17",
+    "expo-constants": "~57.0.18",
+    "expo-dev-client": "~57.0.18",
+    "expo-linking": "~57.0.10",
+    "expo-router": "~57.0.21",
+    "expo-splash-screen": "~57.0.8",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.85.3",
-    "react-native-gesture-handler": "^3.0.2",
-    "react-native-reanimated": "4.4.0",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~3.2.1",
+    "react-native-reanimated": "4.6.0",
     "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.9.2"
+    "react-native-worklets": "0.12.1",
+    "reicon-react-native": "^1.0.103"
   },
   "private": true,
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@react-native/metro-config": "0.86.3",
+    "babel-preset-expo": "~57.0.10",
     "react-native-builder-bob": "^0.41.0",
-    "react-native-monorepo-config": "^0.3.3"
+    "react-native-monorepo-config": "^0.3.3",
+    "react-refresh": "^0.18.0"
   },
   "expo": {
     "install": {
       "exclude": [
+        "@shopify/flash-list",
         "react-native-gesture-handler",
         "react-native-reanimated",
         "react-native-worklets"
