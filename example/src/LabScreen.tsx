@@ -28,6 +28,7 @@ import {
 import { PhotoTile } from './ProfileScreens';
 
 const TAB_NAMES = ['FlatList', 'LegendList', 'ScrollView', 'FlashList'];
+const DEFAULT_PINNED_HEADER = Platform.OS === 'web';
 const LAB_TAB_COLORS = {
   background: '#fafafa',
   trackBackground: '#ebebeb',
@@ -162,7 +163,7 @@ function Toggle({
 export function LabScreen({ onBack }: { onBack: () => void }) {
   const insets = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(0);
-  const [pinned, setPinned] = useState(false);
+  const [pinned, setPinned] = useState(DEFAULT_PINNED_HEADER);
   const [header, setHeader] = useState(true);
   const [behindNotch, setBehindNotch] = useState(true);
   const [pullDown, setPullDown] = useState<PullDownBehavior>('static');
@@ -216,7 +217,7 @@ export function LabScreen({ onBack }: { onBack: () => void }) {
   );
 
   const reset = () => {
-    setPinned(false);
+    setPinned(DEFAULT_PINNED_HEADER);
     setHeader(true);
     setBehindNotch(true);
     setPullDown('static');
