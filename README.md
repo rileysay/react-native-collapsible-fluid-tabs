@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/readme-banner.png" width="100%" alt="Fluid Tabs — a tab bar above Posts, Photos, and About cards." />
+  <img src="./docs/readme-banner.png" width="100%" alt="Fluid Tabs — collapsible tabs for React Native, with X and Instagram profile demos." />
 </p>
 
 # Fluid Tabs
