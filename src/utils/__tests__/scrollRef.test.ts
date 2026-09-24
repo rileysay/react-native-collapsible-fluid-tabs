@@ -1,7 +1,41 @@
-import type { SharedValue } from 'react-native-reanimated';
+import {
+  scrollTo,
+  type AnimatedRef,
+  type SharedValue,
+} from 'react-native-reanimated';
 
-import { setScrollRef } from '../scrollRef';
+import { scrollToMountedRef, setScrollRef } from '../scrollRef';
 jest.mock('react-native-reanimated', () => ({ scrollTo: jest.fn() }));
+
+describe('scrollToMountedRef', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('scrolls with an object-shaped UI ref after the list mounts', () => {
+    const ref = { value: 42 } as unknown as AnimatedRef<any>;
+    const mounted = { value: true } as SharedValue<boolean>;
+
+    expect(scrollToMountedRef(ref, mounted, 0, 120, false)).toBe(true);
+    expect(scrollTo).toHaveBeenCalledWith(ref, 0, 120, false);
+  });
+
+  it('scrolls with a callable UI ref from earlier Reanimated versions', () => {
+    const ref = jest.fn() as unknown as AnimatedRef<any>;
+    const mounted = { value: true } as SharedValue<boolean>;
+
+    expect(scrollToMountedRef(ref, mounted, 0, 120, false)).toBe(true);
+    expect(scrollTo).toHaveBeenCalledWith(ref, 0, 120, false);
+  });
+
+  it('does not scroll after the list unmounts', () => {
+    const ref = { value: 42 } as unknown as AnimatedRef<any>;
+    const mounted = { value: false } as SharedValue<boolean>;
+
+    expect(scrollToMountedRef(ref, mounted, 0, 120, false)).toBe(false);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+});
 
 describe('setScrollRef', () => {
   it('initializes the native ref before making it eligible for scrolling', () => {

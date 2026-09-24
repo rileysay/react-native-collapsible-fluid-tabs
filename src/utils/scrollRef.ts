@@ -12,7 +12,8 @@ export function scrollToMountedRef(
   animated: boolean
 ) {
   'worklet';
-  if (!ref || !mounted?.value || !ref()) return false;
+  // Reanimated 4.7 maps animated refs to non-callable shareables on the UI runtime.
+  if (!ref || !mounted?.value) return false;
   scrollTo(ref, x, y, animated);
   return true;
 }
