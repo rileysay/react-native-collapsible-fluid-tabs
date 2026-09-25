@@ -5,7 +5,10 @@ import {
 } from 'react-native-reanimated';
 
 import { useTabsContext } from './context';
-import { getHeaderScrollOffset } from './utils/paging';
+import {
+  getHeaderCollapseRange,
+  getHeaderScrollOffset,
+} from './utils/paging';
 
 /** Header measurements and animation values returned by {@link useCollapsibleHeader}. */
 export interface CollapsibleHeader {
@@ -21,10 +24,12 @@ export interface CollapsibleHeader {
   tabBarHeight: number;
   /** Reserved top inset (the device safe area unless Container.topInset overrides it). */
   topInset: number;
+  /** Minimum visible collapsible header height after chrome collapse. */
+  minHeaderHeight: number;
   /**
    * Fixed chrome height when the collapsing header is fully collapsed
-   * (pinned header + top inset + tab bar). Excludes the collapsing header. Handy for
-   * positioning a custom sticky element or a RefreshControl.
+   * (pinned header + top inset + min header + tab bar). Handy for positioning a
+   * custom sticky element or a RefreshControl.
    */
   contentTop: number;
 }
@@ -45,12 +50,15 @@ export function useCollapsibleHeader(): CollapsibleHeader {
     pinnedHeaderHeight,
     tabBarHeight,
     topInset,
+    minHeaderHeight,
   } = useTabsContext();
 
   const collapseProgress = useDerivedValue(() => {
     'worklet';
     const h = headerHeight.value;
     if (h <= 0) return 0;
+    const range = getHeaderCollapseRange(h, minHeaderHeight);
+    if (range <= 0) return 0;
     const offset = getHeaderScrollOffset(
       activeIndex.value,
       perPageScrollY.length,
@@ -59,7 +67,7 @@ export function useCollapsibleHeader(): CollapsibleHeader {
       scrollToTopIndex.value,
       scrollToTopOffset.value
     );
-    const p = offset / h;
+    const p = offset / range;
     return p < 0 ? 0 : p > 1 ? 1 : p;
   });
 
@@ -70,6 +78,8 @@ export function useCollapsibleHeader(): CollapsibleHeader {
     pinnedHeaderHeight,
     tabBarHeight,
     topInset,
-    contentTop: pinnedHeaderHeight + topInset + tabBarHeight,
+    minHeaderHeight,
+    contentTop:
+      pinnedHeaderHeight + topInset + minHeaderHeight + tabBarHeight,
   };
 }
