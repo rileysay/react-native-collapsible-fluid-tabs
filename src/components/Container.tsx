@@ -1396,7 +1396,6 @@ function useContainerMeasurements({
   minPageContentHeight,
   screenHeight,
   tabBarHeight,
-  minHeaderHeight,
   swipeGestureTopInset,
 }: {
   pinnedHeaderHeight: ContainerProps['pinnedHeaderHeight'];
@@ -1407,7 +1406,6 @@ function useContainerMeasurements({
   minPageContentHeight: ContainerProps['minPageContentHeight'];
   screenHeight: number;
   tabBarHeight: number;
-  minHeaderHeight: number;
   swipeGestureTopInset: ContainerProps['swipeGestureTopInset'];
 }) {
   const { top: safeTopInset, bottom: bottomInset } = useSafeAreaInsets();
@@ -1673,7 +1671,6 @@ function ContainerImpl(props: ContainerImplProps) {
     minPageContentHeight,
     screenHeight,
     tabBarHeight,
-    minHeaderHeight,
     swipeGestureTopInset,
   });
   useLayoutEffect(() => {
