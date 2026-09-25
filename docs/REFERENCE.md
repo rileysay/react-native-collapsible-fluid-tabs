@@ -269,6 +269,8 @@ It's **adaptive**: equal-width pills when tabs fit, and a horizontally scrollabl
 
 For collapse motion in a worklet, start with `perPageScrollY[activeIndex.value]?.value`. During a same-tab scroll-to-top, use `scrollToTopOffset.value` when `scrollToTopIndex.value` matches the active index. Android's custom stretch pull is represented by a negative `scrollY.value`, while the native list remains at zero. See `Tabs.DefaultTabBar` for the full offset selection and positioning logic.
 
+Keep a custom bar glued under the collapsing header. `collapseProgress` reaches 1 when the collapsible range is finished, so travel only `(headerHeight - minHeaderHeight) * collapseProgress`, not the full `headerHeight`. The bar's `translateY` then rests at `minHeaderHeight`. Multiplying progress by the full header height makes the bar outrun the header whenever `minHeaderHeight` is greater than 0.
+
 ### Hooks
 
 **`useCollapsibleHeader()`** — build a custom sticky element inside a tab (a filter bar, segmented control, …). Call it inside a `<Tabs.Container>`:
