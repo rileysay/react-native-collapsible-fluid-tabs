@@ -75,14 +75,27 @@ export function rubberBand(
  * position. With `stretch`, overscroll (negative scrollY) pushes the header
  * down; otherwise overscroll is ignored and the header only collapses upward.
  */
+/** Scroll distance over which the collapsible header may collapse. */
+export function getHeaderCollapseRange(
+  headerHeight: number,
+  minHeaderHeight: number = 0
+): number {
+  'worklet';
+  const h = Math.max(0, headerHeight);
+  const min = Math.min(Math.max(0, minHeaderHeight), h);
+  return h - min;
+}
+
 export function collapseTranslateY(
   scrollY: number,
   headerHeight: number,
-  stretch: boolean
+  stretch: boolean,
+  minHeaderHeight: number = 0
 ): number {
   'worklet';
   if (scrollY < 0) return stretch ? -scrollY : 0;
-  return -Math.min(scrollY, headerHeight);
+  const range = getHeaderCollapseRange(headerHeight, minHeaderHeight);
+  return -Math.min(scrollY, range);
 }
 
 type ScrollOffsetFallback = number | { value: number };

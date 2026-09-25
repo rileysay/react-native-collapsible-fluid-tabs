@@ -35,7 +35,10 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { TabsContext } from '../context';
-import { getHeaderScrollOffset } from '../utils/paging';
+import {
+  getHeaderCollapseRange,
+  getHeaderScrollOffset,
+} from '../utils/paging';
 import type { TabBarRenderProps, TabConfig } from '../types';
 
 /** Color overrides for {@link DefaultTabBarProps.colors}. */
@@ -116,6 +119,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     tabBarHeight,
     topInset,
     pinnedHeaderHeight,
+    minHeaderHeight,
     pullDownBehavior,
     onTabPress,
     colors,
@@ -174,17 +178,21 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
       headerScrollToTopIndex.value,
       headerScrollToTopOffset.value
     );
+    const h = headerHeight.value;
+    const range = getHeaderCollapseRange(h, minHeaderHeight);
     const translateY =
       offset < 0
         ? stretch
-          ? headerHeight.value + Math.abs(offset)
-          : headerHeight.value
-        : interpolate(
-            offset,
-            [0, headerHeight.value],
-            [headerHeight.value, 0],
-            Extrapolation.CLAMP
-          );
+          ? h + Math.abs(offset)
+          : h
+        : range <= 0
+          ? h
+          : interpolate(
+              offset,
+              [0, range],
+              [h, minHeaderHeight],
+              Extrapolation.CLAMP
+            );
 
     return { transform: [{ translateY }] };
   });
