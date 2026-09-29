@@ -1,6 +1,7 @@
 import {
   clampTabIndex,
   collapseTranslateY,
+  getHeaderCollapseRange,
   getHeaderScrollOffset,
   resolveSnapIndex,
   rubberBand,
@@ -110,6 +111,13 @@ describe('collapseTranslateY', () => {
 
   it('pushes the header down on overscroll when stretching', () => {
     expect(collapseTranslateY(-80, 200, true)).toBe(80);
+  });
+
+  it('stops collapsing once the minimum visible header height remains', () => {
+    expect(getHeaderCollapseRange(200, 60)).toBe(140);
+    expect(collapseTranslateY(100, 200, false, 60)).toBe(-100);
+    expect(collapseTranslateY(500, 200, false, 60)).toBe(-140);
+    expect(collapseTranslateY(-80, 200, true, 60)).toBe(80);
   });
 });
 

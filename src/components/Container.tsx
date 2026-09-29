@@ -52,6 +52,7 @@ import { PULL_HOLD_OFFSET, type RefreshTabState } from '../utils/refresh';
 import {
   clampTabIndex,
   collapseTranslateY,
+  getHeaderCollapseRange,
   getHeaderScrollOffset,
   resolveSnapIndex,
   rubberBand,
@@ -213,6 +214,7 @@ function usePagerListState({
   activeIndex,
   scrollY,
   headerHeight,
+  minHeaderHeight,
   momentumActive,
   usesCustomPullSV,
   reduceMotionSV,
@@ -221,6 +223,7 @@ function usePagerListState({
   activeIndex: SharedValue<number>;
   scrollY: SharedValue<number>;
   headerHeight: SharedValue<number>;
+  minHeaderHeight: number;
   momentumActive: SharedValue<boolean>;
   usesCustomPullSV: SharedValue<boolean>;
   reduceMotionSV: SharedValue<boolean>;
@@ -462,16 +465,20 @@ function usePagerListState({
       // not a real list position — parking pages at it would leave a stuck
       // pulled-down state on arrival (the list emits no events until touched).
       const sourceY = Math.max(0, scrollY.value);
+      const collapseRange = getHeaderCollapseRange(
+        headerHeight.value,
+        minHeaderHeight
+      );
       for (let i = 0; i < listRefs.length; i++) {
         if (i === excludeIndex) continue;
         const ref = listRefs[i];
         const y = perPageScrollY[i];
         if (!ref || !y) continue;
         const target =
-          sourceY < headerHeight.value
+          sourceY < collapseRange
             ? sourceY
-            : y.value < headerHeight.value
-              ? headerHeight.value
+            : y.value < collapseRange
+              ? collapseRange
               : null;
         // freezeLists/prepareForIndexChange handle momentum cancellation.
         // Alignment itself needs no native command when the offset matches.
@@ -480,7 +487,14 @@ function usePagerListState({
         }
       }
     },
-    [alignList, headerHeight, listRefs, perPageScrollY, scrollY]
+    [
+      alignList,
+      headerHeight,
+      minHeaderHeight,
+      listRefs,
+      perPageScrollY,
+      scrollY,
+    ]
   );
 
   return {
@@ -510,6 +524,7 @@ function usePagerGestures({
   swipeGestureTopInset,
   tabBarHeight,
   headerHeight,
+  minHeaderHeight,
   scrollToTopIndex,
   scrollToTopOffset,
   pullDownBehavior,
@@ -548,6 +563,7 @@ function usePagerGestures({
   swipeGestureTopInset: ContainerProps['swipeGestureTopInset'];
   tabBarHeight: number;
   headerHeight: SharedValue<number>;
+  minHeaderHeight: number;
   scrollToTopIndex: SharedValue<number>;
   scrollToTopOffset: SharedValue<number>;
   pullDownBehavior: ContainerProps['pullDownBehavior'];
@@ -609,7 +625,8 @@ function usePagerGestures({
         collapseTranslateY(
           offset,
           headerHeight.value,
-          pullDownBehavior === 'stretch'
+          pullDownBehavior === 'stretch',
+          minHeaderHeight
         );
       return y >= pinnedTotal && y < bottom;
     },
@@ -624,6 +641,7 @@ function usePagerGestures({
       tabBarHeight,
       headerHeight,
       pullDownBehavior,
+      minHeaderHeight,
     ]
   );
 
@@ -659,7 +677,8 @@ function usePagerGestures({
               collapseTranslateY(
                 offset,
                 headerHeight.value,
-                pullDownBehavior === 'stretch'
+                pullDownBehavior === 'stretch',
+                minHeaderHeight
               );
             if (touch && touch.y < chromeBottom) {
               GestureStateManager.fail(e.handlerTag);
@@ -763,6 +782,7 @@ function usePagerGestures({
         tabBarHeight,
         headerHeight,
         pullDownBehavior,
+        minHeaderHeight,
         momentumActive,
         grabCatch,
         listRefs,
@@ -880,6 +900,7 @@ interface ContainerContentProps {
   resolvedPinnedHeaderHeight: number;
   tabBarHeight: number;
   topInset: number;
+  minHeaderHeight: number;
   scrollY: SharedValue<number>;
   perPageScrollY: SharedValue<number>[];
   scrollToTopIndex: SharedValue<number>;
@@ -918,6 +939,7 @@ function ContainerContentBase({
   resolvedPinnedHeaderHeight,
   tabBarHeight,
   topInset,
+  minHeaderHeight,
   scrollY,
   perPageScrollY,
   scrollToTopIndex,
@@ -958,6 +980,7 @@ function ContainerContentBase({
     pinnedHeaderHeight: resolvedPinnedHeaderHeight,
     tabBarHeight,
     topInset,
+    minHeaderHeight,
     pullDownBehavior: pullDownBehavior ?? 'static',
     onTabPress,
   };
@@ -1142,6 +1165,7 @@ function useTabNavigation({
   scrollToTopOffset,
   cancelScrollToTop,
   headerHeight,
+  minHeaderHeight,
   listRefs,
   listMounted,
   scrollToTopOnTabPress,
@@ -1164,6 +1188,7 @@ function useTabNavigation({
   scrollToTopOffset: SharedValue<number>;
   cancelScrollToTop: () => void;
   headerHeight: SharedValue<number>;
+  minHeaderHeight: number;
   listRefs: AnimatedRef<any>[];
   listMounted: SharedValue<boolean>[];
   scrollToTopOnTabPress: boolean;
@@ -1175,7 +1200,10 @@ function useTabNavigation({
       // Clamped for the same reason as syncLists: never propagate a
       // synthetic negative pull offset into the pages' scroll state.
       const sourceY = Math.max(0, scrollY.value);
-      const collapseRange = headerHeight.value;
+      const collapseRange = getHeaderCollapseRange(
+        headerHeight.value,
+        minHeaderHeight
+      );
 
       for (let i = 0; i < listRefs.length; i++) {
         const ref = listRefs[i];
@@ -1199,7 +1227,14 @@ function useTabNavigation({
       const nextY = perPageScrollY[nextIndex];
       if (nextY) scrollY.value = nextY.value;
     },
-    [alignList, scrollY, headerHeight, listRefs, perPageScrollY]
+    [
+      alignList,
+      scrollY,
+      headerHeight,
+      minHeaderHeight,
+      listRefs,
+      perPageScrollY,
+    ]
   );
 
   const goToIndex = useCallback(
@@ -1460,6 +1495,7 @@ function useContainerAnimatedStyles({
   refreshStates,
   pullDownBehavior,
   headerHeight,
+  minHeaderHeight,
 }: {
   scrollY: SharedValue<number>;
   activeIndex: SharedValue<number>;
@@ -1472,6 +1508,7 @@ function useContainerAnimatedStyles({
   refreshStates: SharedValue<RefreshTabState[]>;
   pullDownBehavior: ContainerProps['pullDownBehavior'];
   headerHeight: SharedValue<number>;
+  minHeaderHeight: number;
 }) {
   const pullIndicatorStyle = useAnimatedStyle(() => {
     'worklet';
@@ -1535,7 +1572,12 @@ function useContainerAnimatedStyles({
     return {
       transform: [
         {
-          translateY: collapseTranslateY(offset, headerHeight.value, stretch),
+          translateY: collapseTranslateY(
+            offset,
+            headerHeight.value,
+            stretch,
+            minHeaderHeight
+          ),
         },
       ],
     };
@@ -1587,6 +1629,7 @@ function ContainerImpl(props: ContainerImplProps) {
     renderPinnedHeader,
     pinnedHeaderHeight,
     topInset: topInsetOverride,
+    minHeaderHeight: minHeaderHeightProp,
     tabBarHeight = DEFAULT_TAB_BAR_HEIGHT,
     initialIndex = 0,
     index: controlledIndex,
@@ -1615,6 +1658,11 @@ function ContainerImpl(props: ContainerImplProps) {
     Number.isFinite(lazyPreloadDistance) ? Math.floor(lazyPreloadDistance) : 1
   );
 
+  const minHeaderHeight =
+    minHeaderHeightProp != null && Number.isFinite(minHeaderHeightProp)
+      ? Math.max(0, minHeaderHeightProp)
+      : 0;
+
   const headerHeight = useSharedValue(renderHeader ? estimatedHeaderHeight : 0);
   const {
     topInset,
@@ -1640,6 +1688,10 @@ function ContainerImpl(props: ContainerImplProps) {
     tabBarHeight,
     swipeGestureTopInset,
   });
+  const effectiveMinHeaderHeight = Math.min(
+    minHeaderHeight,
+    Math.max(0, measuredHeaderHeight)
+  );
   useLayoutEffect(() => {
     // Removing the header must also remove its spacer and collapse range.
     headerHeight.value = measuredHeaderHeight;
@@ -1737,6 +1789,7 @@ function ContainerImpl(props: ContainerImplProps) {
     activeIndex,
     scrollY,
     headerHeight,
+    minHeaderHeight: effectiveMinHeaderHeight,
     momentumActive,
     usesCustomPullSV,
     reduceMotionSV,
@@ -1839,6 +1892,7 @@ function ContainerImpl(props: ContainerImplProps) {
       swipeGestureTopInset,
       tabBarHeight,
       headerHeight,
+      minHeaderHeight: effectiveMinHeaderHeight,
       scrollToTopIndex,
       scrollToTopOffset,
       pullDownBehavior,
@@ -1889,6 +1943,7 @@ function ContainerImpl(props: ContainerImplProps) {
       refreshStates,
       pullDownBehavior,
       headerHeight,
+      minHeaderHeight: effectiveMinHeaderHeight,
     });
 
   const handleTabPress = useTabNavigation({
@@ -1909,6 +1964,7 @@ function ContainerImpl(props: ContainerImplProps) {
     scrollToTopOffset,
     cancelScrollToTop,
     headerHeight,
+    minHeaderHeight: effectiveMinHeaderHeight,
     listRefs,
     listMounted,
     scrollToTopOnTabPress,
@@ -1927,6 +1983,7 @@ function ContainerImpl(props: ContainerImplProps) {
       headerHeightValue: measuredHeaderHeight,
       tabBarHeight,
       topInset,
+      minHeaderHeight: effectiveMinHeaderHeight,
       bottomInset,
       minPageContentHeight: resolvedMinContentHeight,
       listRefs,
@@ -1954,6 +2011,7 @@ function ContainerImpl(props: ContainerImplProps) {
       measuredHeaderHeight,
       tabBarHeight,
       topInset,
+      effectiveMinHeaderHeight,
       bottomInset,
       resolvedMinContentHeight,
       tabCount,
@@ -1975,6 +2033,7 @@ function ContainerImpl(props: ContainerImplProps) {
       resolvedPinnedHeaderHeight={resolvedPinnedHeaderHeight}
       tabBarHeight={tabBarHeight}
       topInset={topInset}
+      minHeaderHeight={effectiveMinHeaderHeight}
       scrollY={scrollY}
       perPageScrollY={perPageScrollY}
       scrollToTopIndex={scrollToTopIndex}
