@@ -38,6 +38,12 @@ export {
 };
 export { useTabsContext, useTabIndex } from './context';
 export { useCollapsibleHeader } from './hooks';
+export { registerNativeHeaderScroll } from './components/SingleHeader';
+export type {
+  NativeHeaderScrollViews,
+  NativeHeaderScrollHostProps,
+  NativeHeaderScrollPageProps,
+} from './components/SingleHeader';
 export type { CollapsibleHeader } from './hooks';
 
 export type {
