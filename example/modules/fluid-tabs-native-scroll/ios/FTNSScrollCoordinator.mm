@@ -20,6 +20,29 @@ static void CollectOuterScrollViews(UIView *view, NSMutableSet<UIScrollView *> *
   for (UIView *child in view.subviews) CollectOuterScrollViews(child, result);
 }
 
+// A touch that starts on the header or tab bar while the list is still coasting
+// would otherwise be consumed by UIKit's momentum catch, so the first tap on a
+// tab or header button only stops the list. Stop it before any recognizer sees
+// the touch: the tap then reaches the control, and a drag still begins from the
+// stopped position. Touches on the list itself keep UIKit's catch behavior.
+static void StopCoastingForExternalTouch(UIScrollView *scrollView)
+{
+  if (!scrollView.isDecelerating || scrollView.isDragging) return;
+  UIEdgeInsets inset = scrollView.adjustedContentInset;
+  CGPoint offset = scrollView.contentOffset;
+  CGFloat minY = -inset.top;
+  CGFloat maxY = MAX(minY, scrollView.contentSize.height - scrollView.bounds.size.height + inset.bottom);
+  // Never freeze a bounce: stopping past an edge would leave the list overscrolled.
+  if (offset.y < minY || offset.y > maxY) return;
+  [scrollView setContentOffset:offset animated:NO];
+  // Report the end of momentum as a natural stop would, so React Native and the
+  // tabs container do not keep treating the list as moving.
+  id<UIScrollViewDelegate> delegate = scrollView.delegate;
+  if ([delegate respondsToSelector:@selector(scrollViewDidEndDecelerating:)]) {
+    [delegate scrollViewDidEndDecelerating:scrollView];
+  }
+}
+
 static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
 {
   return recognizer.state == UIGestureRecognizerStateBegan || recognizer.state == UIGestureRecognizerStateChanged;
@@ -246,6 +269,7 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   // Hit-testing precedes recognizer delivery, including a native pan that
   // catches deceleration on touch-down. Record the actual hit origin early.
   if (!_owner || event.type != UIEventTypeTouches) return;
+  if (![view isDescendantOfView:_owner]) StopCoastingForExternalTouch(_owner);
   for (UITouch *touch in event.allTouches) {
     if (touch.phase == UITouchPhaseBegan) {
       RNGHExternalScrollRecordHitView(_owner.panGestureRecognizer, view);
