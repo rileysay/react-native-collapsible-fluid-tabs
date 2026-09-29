@@ -16,4 +16,6 @@ npm install react-native-collapsible-fluid-tabs
 
 See the [installation guide](https://fluid-tabs.vercel.app/docs/installation) for required dependencies and setup.
 
+**Beta:** this branch adds [iOS native header scroll](./docs/IOS-NATIVE-HEADER-SCROLL.md), where drags that start on the header get the same native momentum, overscroll and refresh as the list.
+
 [MIT](./LICENSE)
