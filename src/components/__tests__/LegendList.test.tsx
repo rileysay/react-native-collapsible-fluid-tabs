@@ -3,7 +3,8 @@
 
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Platform, type ScrollViewProps } from 'react-native';
+import { Platform, View, type ScrollViewProps } from 'react-native';
+import type { NativeGesture } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 import type { AnimatedLegendListSharedValues } from '@legendapp/list/reanimated';
@@ -12,6 +13,7 @@ import { TabIndexContext, TabsContext } from '../../context';
 import type { InternalTabsContextValue } from '../../types';
 import { getHeaderScrollOffset } from '../../utils/paging';
 import { LegendList } from '../LegendList';
+import { registerNativeHeaderScroll } from '../SingleHeader';
 
 type ListProps = {
   sharedValues?: AnimatedLegendListSharedValues;
@@ -23,17 +25,29 @@ type ListProps = {
 };
 let mockListProps: ListProps;
 let mockNativeOffset: number;
+const mockDetectorGestures: unknown[] = [];
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
   View: ({ children }: { children?: ReactNode }) => children ?? null,
+  ScrollView: ({ children }: { children?: ReactNode }) => children ?? null,
 }));
 jest.mock('react-native-gesture-handler', () => ({
-  GestureDetector: ({ children }: { children?: ReactNode }) => children ?? null,
+  GestureDetector: ({
+    children,
+    gesture,
+  }: {
+    children?: ReactNode;
+    gesture?: unknown;
+  }) => {
+    mockDetectorGestures.push(gesture);
+    return children ?? null;
+  },
 }));
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: {
+    createAnimatedComponent: <T,>(component: T) => component,
     View: ({ children }: { children?: ReactNode }) => children ?? null,
     ScrollView: ({ children }: { children?: ReactNode }) => children ?? null,
   },
@@ -218,4 +232,27 @@ it('does not reset a dragged header when consumer sharedValues changes', () => {
   renderList({ isAtEnd });
   expect(headerOffset()).toBe(120);
   expect(mockListProps.sharedValues?.isAtEnd).toBe(isAtEnd);
+});
+
+it('attaches the list gesture only to the actual scroller with native header scroll', () => {
+  Platform.OS = 'ios';
+  const gesture = { handlerTag: 7 } as unknown as NativeGesture;
+  context = {
+    ...context,
+    listNativeGestures: [gesture],
+  } as unknown as InternalTabsContextValue;
+  registerNativeHeaderScroll({ Host: View as never, Page: View as never });
+  try {
+    mockDetectorGestures.length = 0;
+    renderList();
+    // The list itself is not wrapped, so the gesture never gets two detectors.
+    expect(mockDetectorGestures).toEqual([]);
+
+    const renderScroll = mockListProps.renderScrollComponent!;
+    act(() => root.render(renderScroll({ children: <span>Row</span> })));
+    expect(mockDetectorGestures).toEqual([gesture]);
+    expect(host.textContent).toBe('Row');
+  } finally {
+    registerNativeHeaderScroll(null);
+  }
 });

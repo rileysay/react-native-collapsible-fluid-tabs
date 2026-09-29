@@ -13,6 +13,7 @@ import { FOOTER_GAP } from '../constants';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
 import { useTrackedScrollRef } from './useTrackedScrollRef';
 import { useListScrollMetrics } from './useListScrollMetrics';
+import { SingleHeaderPage } from './SingleHeader';
 
 // On web the browser scroll view should stay a plain DOM scroller; wrapping it
 // in a Native GestureDetector steals horizontal pointer drags from the pager.
@@ -131,6 +132,10 @@ export const ScrollView: React.ForwardRefExoticComponent<
 
     if (USE_DIRECT_WEB_SCROLL) return scrollView;
 
-    return <ListDetector gesture={nativeGesture}>{scrollView}</ListDetector>;
+    return (
+      <SingleHeaderPage>
+        <ListDetector gesture={nativeGesture}>{scrollView}</ListDetector>
+      </SingleHeaderPage>
+    );
   }
 );

@@ -22,6 +22,10 @@ import { renderListComponent } from '../utils/renderListComponent';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
 import { useTrackedScrollRef } from './useTrackedScrollRef';
 import { useListScrollMetrics } from './useListScrollMetrics';
+import {
+  isNativeHeaderScrollEnabled,
+  useSingleHeaderScrollComponent,
+} from './SingleHeader';
 
 // On web the browser scroll view should stay a plain DOM scroller; wrapping it
 // in a Native GestureDetector steals horizontal pointer drags from the pager.
@@ -132,12 +136,17 @@ function TabsFlatListInner<T>(
 
   const minHeight = minContentHeight ?? minPageContentHeight;
   const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
+  const renderScrollComponent = useSingleHeaderScrollComponent(
+    listProps.renderScrollComponent,
+    nativeGesture
+  );
   const AnimatedFlatList =
     Animated.FlatList as unknown as React.ComponentType<any>;
 
   const list = (
     <AnimatedFlatList
       {...listProps}
+      renderScrollComponent={renderScrollComponent}
       ref={trackedRef}
       refreshControl={refreshControl}
       // The animated event manager follows inner native view replacements.
@@ -159,7 +168,9 @@ function TabsFlatListInner<T>(
     />
   );
 
-  if (USE_DIRECT_WEB_SCROLL) return list;
+  // Native header scroll moves this detector onto the actual scroll view (see
+  // renderScrollComponent). A gesture must never be attached to two detectors.
+  if (USE_DIRECT_WEB_SCROLL || isNativeHeaderScrollEnabled()) return list;
 
   return <ListDetector gesture={nativeGesture}>{list}</ListDetector>;
 }

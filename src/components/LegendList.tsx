@@ -14,6 +14,10 @@ import { renderListComponent } from '../utils/renderListComponent';
 import { useAutoRefreshControl } from './useAutoRefreshControl';
 import { useTrackedScrollRef } from './useTrackedScrollRef';
 import { useListScrollMetrics } from './useListScrollMetrics';
+import {
+  isNativeHeaderScrollEnabled,
+  useSingleHeaderScrollComponent,
+} from './SingleHeader';
 
 // On web the browser scroll view should stay a plain DOM scroller; wrapping it
 // in a Native GestureDetector steals horizontal pointer drags from the pager.
@@ -161,16 +165,18 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
     listProps.style,
   ];
 
+  const renderScrollComponent = useSingleHeaderScrollComponent(
+    listProps.renderScrollComponent ??
+      (Platform.OS === 'web' ? renderWebScrollComponent : undefined),
+    nativeGesture
+  );
   const Component = AnimatedLegendList as unknown as React.ComponentType<any>;
 
   const list = (
     <Component
       {...listProps}
       style={style}
-      renderScrollComponent={
-        listProps.renderScrollComponent ??
-        (Platform.OS === 'web' ? renderWebScrollComponent : undefined)
-      }
+      renderScrollComponent={renderScrollComponent}
       refScrollView={trackedRef}
       refreshControl={refreshControl}
       // AnimatedLegendList forwards its scroll-view ref through Reanimated's
@@ -192,7 +198,9 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
     />
   );
 
-  if (USE_DIRECT_WEB_SCROLL) return list;
+  // Native header scroll moves this detector onto the actual scroll view (see
+  // renderScrollComponent). A gesture must never be attached to two detectors.
+  if (USE_DIRECT_WEB_SCROLL || isNativeHeaderScrollEnabled()) return list;
 
   return <ListDetector gesture={nativeGesture}>{list}</ListDetector>;
 }
