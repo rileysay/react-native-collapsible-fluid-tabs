@@ -2,20 +2,17 @@
 #import "FTNSHeaderPagingGate.h"
 #import "FTNSPageRegistration.h"
 #import "FTNSPointerObserver.h"
-#import <React/RCTScrollViewComponentView.h>
 #import <RNGestureHandler/RNGHExternalScroll.h>
 #import <RNGestureHandler/RNGestureHandler.h>
 #import <RNGestureHandler/RNNativeViewHandler.h>
 #import <math.h>
 
 // The Page is an explicit registration boundary around a scroll renderer.
-// Stop at the first scroll component on each branch, excluding nested carousels.
+// Stop at the first UIScrollView on each branch, excluding nested carousels.
+// A Fabric ScrollView component view holds its UIScrollView as a direct
+// subview, so no React C++ headers are needed to find it.
 static void CollectOuterScrollViews(UIView *view, NSMutableSet<UIScrollView *> *result)
 {
-  if ([view isKindOfClass:RCTScrollViewComponentView.class]) {
-    [result addObject:((RCTScrollViewComponentView *)view).scrollView];
-    return;
-  }
   if ([view isKindOfClass:UIScrollView.class]) {
     [result addObject:(UIScrollView *)view];
     return;

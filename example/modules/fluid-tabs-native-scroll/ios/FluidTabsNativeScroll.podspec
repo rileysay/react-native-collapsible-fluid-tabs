@@ -10,7 +10,6 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
   s.dependency 'RNGestureHandler', '3.2.1'
-  s.dependency 'React-RCTFabric'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20' }
   s.source_files = '**/*.{h,m,mm,swift}'
   s.public_header_files = 'FTNSScrollCoordinator.h'
