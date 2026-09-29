@@ -1,7 +1,13 @@
 import { Stack, usePathname } from 'expo-router';
 import { Platform, StatusBar, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { registerNativeHeaderScroll } from 'react-native-collapsible-fluid-tabs';
+import { nativeHeaderScrollViews } from '../modules/fluid-tabs-native-scroll';
 import { PhonePreviewSafeArea } from '../src/PhonePreviewSafeArea';
+
+// iOS builds that include the local module get native header scrolling in
+// every demo. Other builds pass null and keep the JavaScript header drag.
+registerNativeHeaderScroll(nativeHeaderScrollViews);
 
 export default function Layout() {
   const pathname = usePathname();
