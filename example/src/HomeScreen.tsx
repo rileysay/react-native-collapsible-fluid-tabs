@@ -148,6 +148,47 @@ export function HomeScreen() {
           ))}
         </View>
       </Pressable>
+
+      <View style={s.compareRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open the published 1.5.1 header scroll demo"
+          onPress={() => router.push('/native-scroll-before')}
+          style={({ pressed }) => [
+            s.card,
+            s.compareCard,
+            s.xCard,
+            pressed && s.pressed,
+          ]}
+        >
+          <View style={s.cardCopy}>
+            <Text style={s.number}>04 / BEFORE</Text>
+            <Text style={s.cardTitle}>1.5.1</Text>
+            <Text style={s.cardDescription}>
+              Header drags scrolled{'\n'}from JavaScript.
+            </Text>
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open the native header scroll demo"
+          onPress={() => router.push('/native-scroll-after')}
+          style={({ pressed }) => [
+            s.card,
+            s.compareCard,
+            s.nativeCard,
+            pressed && s.pressed,
+          ]}
+        >
+          <View style={s.cardCopy}>
+            <Text style={s.number}>05 / AFTER</Text>
+            <Text style={s.cardTitle}>Native</Text>
+            <Text style={s.cardDescription}>
+              iOS scrolling from{'\n'}the header too.
+            </Text>
+          </View>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -197,6 +238,9 @@ const s = StyleSheet.create({
     borderColor: '#e5e5e5',
   },
   labCard: { backgroundColor: '#171717', borderColor: '#171717' },
+  compareRow: { flexDirection: 'row', gap: 12 },
+  compareCard: { flex: 1 },
+  nativeCard: { backgroundColor: '#deeead', borderColor: '#cfe29b' },
   cardCopy: { flex: 1, zIndex: 1 },
   cardTop: {
     flexDirection: 'row',

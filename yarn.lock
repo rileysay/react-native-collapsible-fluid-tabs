@@ -10663,6 +10663,7 @@ __metadata:
     react-dom: "npm:19.2.3"
     react-native: "npm:0.86.3"
     react-native-builder-bob: "npm:^0.41.0"
+    react-native-collapsible-fluid-tabs-published: "https://registry.npmjs.org/react-native-collapsible-fluid-tabs/-/react-native-collapsible-fluid-tabs-1.5.1.tgz"
     react-native-gesture-handler: "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch"
     react-native-monorepo-config: "npm:^0.3.3"
     react-native-reanimated: "npm:4.6.0"
@@ -10675,6 +10676,29 @@ __metadata:
     reicon-react-native: "npm:^1.0.103"
   languageName: unknown
   linkType: soft
+
+"react-native-collapsible-fluid-tabs-published@https://registry.npmjs.org/react-native-collapsible-fluid-tabs/-/react-native-collapsible-fluid-tabs-1.5.1.tgz":
+  version: 1.5.1
+  resolution: "react-native-collapsible-fluid-tabs-published@https://registry.npmjs.org/react-native-collapsible-fluid-tabs/-/react-native-collapsible-fluid-tabs-1.5.1.tgz"
+  dependencies:
+    "@babel/runtime": "npm:^7.29.7"
+  peerDependencies:
+    "@legendapp/list": ">=3.2.0"
+    "@shopify/flash-list": ">=2.0.0"
+    react: ">=19.2.0"
+    react-native: ">=0.83.0"
+    react-native-gesture-handler: ">=3.0.0"
+    react-native-reanimated: ">=4.4.0"
+    react-native-safe-area-context: ">=5.0.0"
+    react-native-worklets: ">=0.9.1"
+  peerDependenciesMeta:
+    "@legendapp/list":
+      optional: true
+    "@shopify/flash-list":
+      optional: true
+  checksum: 10c0/1cda19e7179f0f30101e9d86c17d9ce5af9c08b43b05d93e6c86eeaf0636e68a3d64bff8ad6d2cc0bda8077ba401f0fd67fa0d1de943681c4783d24fcb5e69e9
+  languageName: node
+  linkType: hard
 
 "react-native-collapsible-fluid-tabs@workspace:.":
   version: 0.0.0-use.local
