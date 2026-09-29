@@ -63,6 +63,7 @@ import type {
   TabsRef,
 } from '../types';
 import { DefaultTabBar } from './DefaultTabBar';
+import { isNativeHeaderScrollEnabled, SingleHeaderHost } from './SingleHeader';
 import { useCustomPullGesture } from './useCustomPullGesture';
 import { useDirectionalPan } from './useDirectionalPan';
 import { useHeaderScroll, type HeaderScroll } from './useHeaderScroll';
@@ -523,6 +524,7 @@ function usePagerGestures({
   listMounted,
   perPageScrollY,
   isPanning,
+  nativePaging,
   startX,
   translateX,
   pageWidth,
@@ -561,6 +563,7 @@ function usePagerGestures({
   listMounted: SharedValue<boolean>[];
   perPageScrollY: SharedValue<number>[];
   isPanning: SharedValue<boolean>;
+  nativePaging: SharedValue<boolean>;
   startX: SharedValue<number>;
   translateX: SharedValue<number>;
   pageWidth: SharedValue<number>;
@@ -682,6 +685,7 @@ function usePagerGestures({
         onActivate: () => {
           'worklet';
           isPanning.value = true;
+          nativePaging.value = true;
           cancelAnimation(translateX);
           startX.value = translateX.value;
           cancelScrollToTop();
@@ -727,11 +731,16 @@ function usePagerGestures({
           const overscrolled = translateX.value > 0 || translateX.value < minX;
           if (reduceMotionSV.value) {
             translateX.value = target;
+            nativePaging.value = false;
           } else {
-            translateX.value = withSpring(target, {
-              ...spring,
-              velocity: overscrolled ? 0 : velocity,
-            });
+            translateX.value = withSpring(
+              target,
+              { ...spring, velocity: overscrolled ? 0 : velocity },
+              (finished) => {
+                // Native scroll ownership moves only after the page settles.
+                if (finished) nativePaging.value = false;
+              }
+            );
           }
           syncLists(nextIndex);
           const landedY = perPageScrollY[nextIndex];
@@ -753,6 +762,7 @@ function usePagerGestures({
         pagerPanHitSlop,
         swipeGestureTopInset,
         isPanning,
+        nativePaging,
         activeIndex,
         tabCount,
         perPageScrollY,
@@ -821,7 +831,8 @@ function usePagerGestures({
   const customPullPan = useCustomPullGesture({
     directionConfig,
     headerScroll,
-    headerScrollEnabled,
+    // With native header scroll, UIKit owns header drags through the active list.
+    headerScrollEnabled: headerScrollEnabled && !isNativeHeaderScrollEnabled(),
     containsHeaderTouch,
     usesCustomPullSV,
     activeIndex,
@@ -903,6 +914,7 @@ interface ContainerContentProps {
   layoutWidth: number;
   tabCount: number;
   pagerStyle: any;
+  nativePaging: SharedValue<boolean>;
   lazy: boolean;
   mountedTabIndices: Set<number>;
 }
@@ -941,6 +953,7 @@ function ContainerContentBase({
   layoutWidth,
   tabCount,
   pagerStyle,
+  nativePaging,
   lazy,
   mountedTabIndices,
 }: ContainerContentProps) {
@@ -1071,7 +1084,9 @@ function ContainerContentBase({
   const pagerHost = <View style={styles.pagerHost}>{pagerRow}</View>;
 
   return (
-    <View
+    <SingleHeaderHost
+      activeIndex={activeIndex}
+      paging={nativePaging}
       ref={webScrollRef}
       style={[styles.container, containerStyle]}
       onLayout={(e) =>
@@ -1097,7 +1112,7 @@ function ContainerContentBase({
       ) : (
         pagerHost
       )}
-    </View>
+    </SingleHeaderHost>
   );
 }
 
@@ -1133,6 +1148,7 @@ function useTabNavigation({
   pageWidth,
   translateX,
   isPanning,
+  nativePaging,
   reduceMotionSV,
   syncLists,
   alignList,
@@ -1155,6 +1171,7 @@ function useTabNavigation({
   pageWidth: SharedValue<number>;
   translateX: SharedValue<number>;
   isPanning: SharedValue<boolean>;
+  nativePaging: SharedValue<boolean>;
   reduceMotionSV: SharedValue<boolean>;
   syncLists: (excludeIndex?: number) => void;
   alignList: (index: number, target: number) => void;
@@ -1216,6 +1233,7 @@ function useTabNavigation({
         // A release/cancel event from an older swipe must not replace this
         // tap/imperative animation with a second spring to another target.
         isPanning.value = false;
+        nativePaging.value = true;
         cancelAnimation(translateX);
         activeIndex.value = clamped;
         prepareForIndexChange(current, clamped);
@@ -1223,6 +1241,7 @@ function useTabNavigation({
         if (!animated || reduceMotionSV.value) {
           translateX.value = target;
           syncLists(clamped);
+          nativePaging.value = false;
         } else {
           const duration =
             SNAP_DURATION_BASE + distance * SNAP_DURATION_PER_PAGE;
@@ -1232,6 +1251,7 @@ function useTabNavigation({
             (finished) => {
               if (!finished) return;
               syncLists(clamped);
+              nativePaging.value = false;
             }
           );
         }
@@ -1247,6 +1267,7 @@ function useTabNavigation({
       activeIndex,
       translateX,
       isPanning,
+      nativePaging,
       pageWidth,
       syncLists,
       prepareForIndexChange,
@@ -1659,6 +1680,7 @@ function ContainerImpl(props: ContainerImplProps) {
   const translateX = useSharedValue(-startIndex * layoutWidth);
   const startX = useSharedValue(0);
   const isPanning = useSharedValue(false);
+  const nativePaging = useSharedValue(false);
   const pillWidth = useSharedValue(0);
   const momentumActive = useSharedValue(false);
   const grabCatch = useSharedValue(false);
@@ -1700,10 +1722,18 @@ function ContainerImpl(props: ContainerImplProps) {
       // Translation events belong to the previous layout until this finger
       // lifts. Ignore that gesture instead of jumping back to its old origin.
       isPanning.value = false;
+      nativePaging.value = false;
     };
     if (IS_WEB) resizePager();
     else runOnUISync(resizePager);
-  }, [layoutWidth, activeIndex, pageWidth, translateX, isPanning]);
+  }, [
+    layoutWidth,
+    activeIndex,
+    pageWidth,
+    translateX,
+    isPanning,
+    nativePaging,
+  ]);
 
   const reduceMotion = useReducedMotion();
   const reduceMotionSV = useSharedValue(reduceMotion);
@@ -1852,6 +1882,7 @@ function ContainerImpl(props: ContainerImplProps) {
       listMounted,
       perPageScrollY,
       isPanning,
+      nativePaging,
       startX,
       translateX,
       pageWidth,
@@ -1900,6 +1931,7 @@ function ContainerImpl(props: ContainerImplProps) {
     pageWidth,
     translateX,
     isPanning,
+    nativePaging,
     reduceMotionSV,
     syncLists,
     alignList,
@@ -1998,6 +2030,7 @@ function ContainerImpl(props: ContainerImplProps) {
       layoutWidth={layoutWidth}
       tabCount={tabCount}
       pagerStyle={pagerStyle}
+      nativePaging={nativePaging}
       lazy={lazy}
       mountedTabIndices={mountedTabIndices}
     />
