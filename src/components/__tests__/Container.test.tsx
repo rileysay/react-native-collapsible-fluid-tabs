@@ -20,6 +20,7 @@ import type { ContainerProps, TabBarRenderProps, TabsRef } from '../../types';
 import { Container } from '../Container';
 import { Tab } from '../Tab';
 import { useTabsContext } from '../../context';
+import { useCollapsibleHeader } from '../../hooks';
 
 const mockRNQueue: (() => void)[] = [];
 
@@ -57,6 +58,7 @@ jest.mock('react-native-reanimated', () => {
     useAnimatedScrollHandler: (handlers: unknown) => handlers,
     useAnimatedStyle: () => ({}),
     useAnimatedReaction: jest.fn(),
+    useDerivedValue: (worklet: () => unknown) => ({ value: worklet() }),
     useReducedMotion: () => false,
   };
 });
@@ -91,9 +93,11 @@ let props: Omit<ContainerProps, 'children'>;
 let pagerRef: ReturnType<typeof createRef<TabsRef>>;
 let onIndexChange: jest.Mock;
 let context: ReturnType<typeof useTabsContext>;
+let collapsibleHeader: ReturnType<typeof useCollapsibleHeader>;
 
 function ContextProbe() {
   context = useTabsContext();
+  collapsibleHeader = useCollapsibleHeader();
   return null;
 }
 
@@ -367,6 +371,52 @@ it('allows paging over newly exposed content once the header has collapsed', () 
   context.scrollY.value = 200;
   act(() => touchAt(120));
   expect(GestureStateManager.fail).not.toHaveBeenCalled();
+});
+
+it('clamps the public minimum header height to the measured header height', () => {
+  renderPager({ renderHeader: () => null, minHeaderHeight: 100 });
+  const headerProps = jest
+    .mocked(Animated.View)
+    .mock.calls.findLast(([value]) => value.onLayout)![0];
+  const onLayout = headerProps.onLayout;
+  if (typeof onLayout !== 'function')
+    throw new Error('Expected a header layout callback');
+
+  act(() =>
+    onLayout({
+      nativeEvent: { layout: { height: 40 } },
+    } as LayoutChangeEvent)
+  );
+
+  expect(context.minHeaderHeight).toBe(40);
+  expect(collapsibleHeader.contentTop).toBe(24 + 40 + 56);
+});
+
+it('updates the pager touch region when the minimum header height changes', () => {
+  renderPager({ renderHeader: () => null });
+  const headerProps = jest
+    .mocked(Animated.View)
+    .mock.calls.findLast(([value]) => value.onLayout)![0];
+  const onLayout = headerProps.onLayout;
+  if (typeof onLayout !== 'function')
+    throw new Error('Expected a header layout callback');
+  act(() =>
+    onLayout({
+      nativeEvent: { layout: { height: 200 } },
+    } as LayoutChangeEvent)
+  );
+  context.headerHeight.value = 200;
+  context.perPageScrollY[1]!.value = 200;
+  context.scrollY.value = 200;
+
+  jest.mocked(GestureStateManager.fail).mockClear();
+  act(() => touchAt(180));
+  expect(GestureStateManager.fail).not.toHaveBeenCalled();
+
+  renderPager({ minHeaderHeight: 120 });
+  jest.mocked(GestureStateManager.fail).mockClear();
+  act(() => touchAt(180));
+  expect(GestureStateManager.fail).toHaveBeenCalledWith(1);
 });
 
 it('accounts for the current scroll-to-top position in the swipe exclusion', () => {

@@ -5,10 +5,7 @@ import {
 } from 'react-native-reanimated';
 
 import { useTabsContext } from './context';
-import {
-  getHeaderCollapseRange,
-  getHeaderScrollOffset,
-} from './utils/paging';
+import { getHeaderCollapseRange, getHeaderScrollOffset } from './utils/paging';
 
 /** Header measurements and animation values returned by {@link useCollapsibleHeader}. */
 export interface CollapsibleHeader {
@@ -79,7 +76,6 @@ export function useCollapsibleHeader(): CollapsibleHeader {
     tabBarHeight,
     topInset,
     minHeaderHeight,
-    contentTop:
-      pinnedHeaderHeight + topInset + minHeaderHeight + tabBarHeight,
+    contentTop: pinnedHeaderHeight + topInset + minHeaderHeight + tabBarHeight,
   };
 }

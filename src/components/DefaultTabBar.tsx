@@ -35,10 +35,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { TabsContext } from '../context';
-import {
-  getHeaderCollapseRange,
-  getHeaderScrollOffset,
-} from '../utils/paging';
+import { getHeaderCollapseRange, getHeaderScrollOffset } from '../utils/paging';
 import type { TabBarRenderProps, TabConfig } from '../types';
 
 /** Color overrides for {@link DefaultTabBarProps.colors}. */
