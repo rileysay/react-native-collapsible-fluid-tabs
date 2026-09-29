@@ -108,7 +108,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-builder-bob": "^0.41.0",
-    "react-native-gesture-handler": "~3.2.1",
+    "react-native-gesture-handler": "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch",
     "react-native-reanimated": "4.6.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-worklets": "0.12.1",

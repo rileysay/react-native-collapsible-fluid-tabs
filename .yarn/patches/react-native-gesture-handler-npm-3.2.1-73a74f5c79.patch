@@ -1,0 +1,491 @@
+diff --git a/apple/Handlers/RNNativeViewHandler.h b/apple/Handlers/RNNativeViewHandler.h
+index adb8d6d39ad7791cea18b446279797a1b01e2392..d88ed97f2a01dfdacb25bc388f4298b092c74e51 100644
+--- a/apple/Handlers/RNNativeViewHandler.h
++++ b/apple/Handlers/RNNativeViewHandler.h
+@@ -9,6 +9,9 @@
+ #import "RNGestureHandler.h"
+ 
+ @interface RNDummyGestureRecognizer : UIGestureRecognizer
++#if !TARGET_OS_OSX
++- (void)rnghObserveExternalScrollPan:(UIPanGestureRecognizer *)pan;
++#endif
+ @end
+ 
+ /*
+@@ -32,4 +35,7 @@
+ @end
+ 
+ @interface RNNativeViewGestureHandler : RNGestureHandler
++#if !TARGET_OS_OSX
++- (void)rnghPrepareExternalScrollView:(UIScrollView *)scrollView;
++#endif
+ @end
+diff --git a/apple/Handlers/RNNativeViewHandler.mm b/apple/Handlers/RNNativeViewHandler.mm
+index 9c60ce6ae7c65bcb996590f1414376ad9840e8e4..18a743cda7a50af55c825c840054fe509c8979c8 100644
+--- a/apple/Handlers/RNNativeViewHandler.mm
++++ b/apple/Handlers/RNNativeViewHandler.mm
+@@ -7,6 +7,7 @@
+ //
+ 
+ #import "RNNativeViewHandler.h"
++#import "../RNGHExternalScroll.h"
+ 
+ #if !TARGET_OS_OSX
+ #import <UIKit/UIGestureRecognizerSubclass.h>
+@@ -33,6 +34,7 @@
+ #if !TARGET_OS_OSX
+ - (void)touchesBegan:(NSSet<RNGHUITouch *> *)touches withEvent:(UIEvent *)event
+ {
++  RNGHExternalScrollRecordTouches(self, touches);
+   [_gestureHandler setCurrentPointerTypeForEvent:event];
+   [_gestureHandler.pointerTracker touchesBegan:touches withEvent:event];
+ }
+@@ -46,7 +48,9 @@
+ - (void)touchesEnded:(NSSet<RNGHUITouch *> *)touches withEvent:(UIEvent *)event
+ {
+   [_gestureHandler.pointerTracker touchesEnded:touches withEvent:event];
+-  self.state = UIGestureRecognizerStateFailed;
++  self.state = RNGHExternalScrollIsRegistered(self) &&
++      (self.state == UIGestureRecognizerStateBegan || self.state == UIGestureRecognizerStateChanged)
++      ? UIGestureRecognizerStateEnded : UIGestureRecognizerStateFailed;
+ 
+   // For now, we are handling only the scroll view case.
+   // If more views need special treatment, then we can switch to a delegate pattern
+@@ -89,21 +93,34 @@
+ - (void)reset
+ {
+   [_gestureHandler.pointerTracker reset];
++#if !TARGET_OS_OSX
++  RNGHExternalScrollResetTouches(self);
++#endif
+   [super reset];
+   [_gestureHandler reset];
+ }
+ 
++#if !TARGET_OS_OSX
++- (void)rnghObserveExternalScrollPan:(UIPanGestureRecognizer *)pan
++{
++  // Mirror activation even if UIKit processes the real pan after the dummy
++  // in this touch delivery. Pointer tracking remains on the relocated dummy.
++  if (RNGHExternalScrollIsRegistered(self) &&
++      (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged)) {
++    self.state = pan.state;
++  }
++}
++#endif
++
+ - (void)updateStateIfScrollView
+ {
+   RNGHUIScrollView *scrollView = [_gestureHandler retrieveScrollView:self.view];
+   if (!scrollView) {
+     return;
+   }
+-  for (UIGestureRecognizer *scrollViewGestureRecognizer in scrollView.gestureRecognizers) {
+-    if ([_gestureHandler isUIScrollViewPanGestureRecognizer:scrollViewGestureRecognizer]) {
+-      self.state = scrollViewGestureRecognizer.state;
+-    }
+-  }
++#if !TARGET_OS_OSX
++  self.state = scrollView.panGestureRecognizer.state;
++#endif
+ }
+ 
+ @end
+@@ -132,6 +149,13 @@
+   return self;
+ }
+ 
++#if !TARGET_OS_OSX
++- (void)rnghPrepareExternalScrollView:(UIScrollView *)scrollView
++{
++  scrollView.delaysContentTouches = _delaysChildPressedState;
++}
++#endif
++
+ - (void)updateConfig:(NSDictionary *)config
+ {
+   [super updateConfig:config];
+@@ -161,6 +185,7 @@
+ 
+ #if !TARGET_OS_OSX
+   [self bindToUIKitView:view];
++  [NSNotificationCenter.defaultCenter postNotificationName:RNGHExternalScrollHandlerDidBindNotification object:self];
+ #else
+   [super bindToView:view];
+ #endif
+@@ -169,6 +194,7 @@
+ - (void)unbindFromView
+ {
+ #if !TARGET_OS_OSX
++  RNGHExternalScrollRestoreHandler(self);
+   if ([_boundView isKindOfClass:[UIControl class]]) {
+     [(UIControl *)_boundView removeTarget:self action:NULL forControlEvents:UIControlEventAllEvents];
+   }
+@@ -182,6 +208,9 @@
+   _stateObserver = nil;
+ 
+   [super unbindFromView];
++#if !TARGET_OS_OSX
++  [NSNotificationCenter.defaultCenter postNotificationName:RNGHExternalScrollHandlerDidUnbindNotification object:self];
++#endif
+ }
+ 
+ - (void)dispatchStateChange:(RNGestureHandlerState)newState
+@@ -415,7 +444,8 @@
+   CGPoint absolutePosition = CGPointMake(yFlippedAbsolute.x, windowHeight - yFlippedAbsolute.y);
+   CGPoint position = [recognizer.view convertPoint:absolutePosition fromView:recognizer.view.window.contentView];
+ #else
+-  CGPoint position = [recognizer locationInView:recognizer.view];
++  UIView *coordinateOwner = RNGHExternalScrollOriginalView(recognizer) ?: recognizer.view;
++  CGPoint position = [recognizer locationInView:coordinateOwner];
+   CGPoint absolutePosition = [recognizer locationInView:nil];
+ #endif
+ 
+diff --git a/apple/RNGHExternalScroll.h b/apple/RNGHExternalScroll.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..6de305c9684fbcf465ecc71e2592c95e5a1a73d3
+--- /dev/null
++++ b/apple/RNGHExternalScroll.h
+@@ -0,0 +1,29 @@
++#import <Foundation/Foundation.h>
++#import "RNGHUIKit.h"
++
++#if !TARGET_OS_OSX
++@class RNGestureHandler;
++NS_ASSUME_NONNULL_BEGIN
++
++// Opt-in ownership for an existing UIKit scroll pan hosted on an ancestor.
++// All calls must be on the main thread. Does not replace UIKit's delegate/targets.
++FOUNDATION_EXPORT NSNotificationName const RNGHExternalScrollHandlerDidBindNotification;
++FOUNDATION_EXPORT NSNotificationName const RNGHExternalScrollHandlerDidUnbindNotification;
++FOUNDATION_EXPORT void RNGHExternalScrollSetViewOwner(UIView *view, UIScrollView *_Nullable scrollView);
++FOUNDATION_EXPORT UIScrollView *_Nullable RNGHExternalScrollViewOwner(UIView *view);
++FOUNDATION_EXPORT BOOL RNGHExternalScrollAttach(UIScrollView *scrollView, RNGestureHandler *handler, UIView *host);
++FOUNDATION_EXPORT void RNGHExternalScrollRestore(UIScrollView *scrollView, BOOL cancelTouches);
++FOUNDATION_EXPORT void RNGHExternalScrollRestoreHandler(RNGestureHandler *handler);
++FOUNDATION_EXPORT BOOL RNGHExternalScrollIsRegistered(UIGestureRecognizer *recognizer);
++FOUNDATION_EXPORT RNGestureHandler *_Nullable RNGHExternalScrollHandler(UIGestureRecognizer *recognizer);
++// An explicit app coordinator gate may use the same RNGH relation/responder
++// owner, without becoming a scroll pan or changing its own native delegate.
++FOUNDATION_EXPORT void RNGHExternalScrollSetAuxiliaryHandler(UIGestureRecognizer *recognizer, RNGestureHandler *_Nullable handler);
++FOUNDATION_EXPORT UIScrollView *_Nullable RNGHExternalScrollOwner(UIGestureRecognizer *recognizer);
++FOUNDATION_EXPORT UIView *_Nullable RNGHExternalScrollOriginalView(UIGestureRecognizer *recognizer);
++FOUNDATION_EXPORT void RNGHExternalScrollRecordTouches(UIGestureRecognizer *recognizer, NSSet<UITouch *> *touches);
++FOUNDATION_EXPORT void RNGHExternalScrollRecordHitView(UIGestureRecognizer *recognizer, UIView *hitView);
++FOUNDATION_EXPORT void RNGHExternalScrollResetTouches(UIGestureRecognizer *recognizer);
++FOUNDATION_EXPORT BOOL RNGHExternalScrollHasHeaderTouches(UIGestureRecognizer *recognizer);
++NS_ASSUME_NONNULL_END
++#endif
+diff --git a/apple/RNGHExternalScroll.mm b/apple/RNGHExternalScroll.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..7145351cff2229d0dc69496145c666a92dbc5a92
+--- /dev/null
++++ b/apple/RNGHExternalScroll.mm
+@@ -0,0 +1,150 @@
++#import "RNGHExternalScroll.h"
++#if !TARGET_OS_OSX
++#import "RNGestureHandler.h"
++#import "Handlers/RNNativeViewHandler.h"
++#import <objc/runtime.h>
++
++NSNotificationName const RNGHExternalScrollHandlerDidBindNotification = @"RNGHExternalScrollHandlerDidBind";
++NSNotificationName const RNGHExternalScrollHandlerDidUnbindNotification = @"RNGHExternalScrollHandlerDidUnbind";
++
++@interface RNGHExternalScrollRegistration : NSObject
++@property(nonatomic, weak) UIScrollView *scrollView;
++@property(nonatomic, weak) RNGestureHandler *handler;
++@property(nonatomic, weak) UIView *panOriginalView;
++@property(nonatomic, weak) UIView *handlerOriginalView;
++@property(nonatomic) BOOL hasHeaderTouches;
++@end
++@implementation RNGHExternalScrollRegistration
++@end
++
++@interface RNGHExternalScrollWeakOwner : NSObject
++@property(nonatomic, weak) UIScrollView *scrollView;
++@end
++@implementation RNGHExternalScrollWeakOwner
++@end
++
++@interface RNGHExternalScrollWeakHandler : NSObject
++@property(nonatomic, weak) RNGestureHandler *handler;
++@end
++@implementation RNGHExternalScrollWeakHandler
++@end
++
++static char registrationKey;
++static char viewOwnerKey;
++static char auxiliaryHandlerKey;
++static RNGHExternalScrollRegistration *Registration(UIGestureRecognizer *recognizer)
++{
++  return objc_getAssociatedObject(recognizer, &registrationKey);
++}
++
++void RNGHExternalScrollSetViewOwner(UIView *view, UIScrollView *scrollView)
++{
++  NSCAssert(NSThread.isMainThread, @"Scroll ownership is main-thread-only");
++  RNGHExternalScrollWeakOwner *owner = nil;
++  if (scrollView) {
++    owner = [RNGHExternalScrollWeakOwner new];
++    owner.scrollView = scrollView;
++  }
++  objc_setAssociatedObject(view, &viewOwnerKey, owner, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++}
++
++UIScrollView *RNGHExternalScrollViewOwner(UIView *view)
++{
++  return ((RNGHExternalScrollWeakOwner *)objc_getAssociatedObject(view, &viewOwnerKey)).scrollView;
++}
++
++BOOL RNGHExternalScrollAttach(UIScrollView *scrollView, RNGestureHandler *handler, UIView *host)
++{
++  NSCAssert(NSThread.isMainThread, @"Scroll ownership is main-thread-only");
++  UIGestureRecognizer *dummy = handler.recognizer;
++  UIGestureRecognizer *pan = scrollView.panGestureRecognizer;
++  if (![handler isKindOfClass:RNNativeViewGestureHandler.class] || !dummy.view || !pan.view ||
++      ![scrollView isDescendantOfView:host] || Registration(pan) || Registration(dummy) ||
++      pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
++    return NO;
++  }
++  RNGHExternalScrollRegistration *registration = [RNGHExternalScrollRegistration new];
++  registration.scrollView = scrollView;
++  registration.handler = handler;
++  registration.panOriginalView = pan.view;
++  registration.handlerOriginalView = dummy.view;
++  objc_setAssociatedObject(pan, &registrationKey, registration, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++  objc_setAssociatedObject(dummy, &registrationKey, registration, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++  // UIView moves the original recognizers. UIKit still owns its own pan delegate and targets.
++  [host addGestureRecognizer:dummy];
++  [host addGestureRecognizer:pan];
++  [(RNNativeViewGestureHandler *)handler rnghPrepareExternalScrollView:scrollView];
++  [pan addTarget:dummy action:@selector(rnghObserveExternalScrollPan:)];
++  return YES;
++}
++
++void RNGHExternalScrollRestore(UIScrollView *scrollView, BOOL cancelTouches)
++{
++  NSCAssert(NSThread.isMainThread, @"Scroll ownership is main-thread-only");
++  UIGestureRecognizer *pan = scrollView.panGestureRecognizer;
++  RNGHExternalScrollRegistration *registration = Registration(pan);
++  if (!registration) return;
++  UIGestureRecognizer *dummy = registration.handler.recognizer;
++  [pan removeTarget:dummy action:@selector(rnghObserveExternalScrollPan:)];
++  BOOL panEnabled = pan.enabled;
++  BOOL dummyEnabled = dummy.enabled;
++  if (cancelTouches) {
++    pan.enabled = NO;
++    dummy.enabled = NO;
++  }
++  UIView *panView = registration.panOriginalView ?: scrollView;
++  UIView *dummyView = registration.handlerOriginalView;
++  [panView addGestureRecognizer:pan];
++  if (dummyView) [dummyView addGestureRecognizer:dummy];
++  else [dummy.view removeGestureRecognizer:dummy];
++  objc_setAssociatedObject(pan, &registrationKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++  if (dummy) objc_setAssociatedObject(dummy, &registrationKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++  if (cancelTouches) {
++    pan.enabled = panEnabled;
++    dummy.enabled = dummyEnabled;
++  }
++}
++
++void RNGHExternalScrollRestoreHandler(RNGestureHandler *handler)
++{
++  UIScrollView *owner = RNGHExternalScrollOwner(handler.recognizer);
++  if (owner) RNGHExternalScrollRestore(owner, YES);
++}
++
++BOOL RNGHExternalScrollIsRegistered(UIGestureRecognizer *recognizer) { return Registration(recognizer) != nil; }
++RNGestureHandler *RNGHExternalScrollHandler(UIGestureRecognizer *recognizer)
++{
++  RNGHExternalScrollWeakHandler *auxiliary = objc_getAssociatedObject(recognizer, &auxiliaryHandlerKey);
++  return Registration(recognizer).handler ?: auxiliary.handler;
++}
++void RNGHExternalScrollSetAuxiliaryHandler(UIGestureRecognizer *recognizer, RNGestureHandler *handler)
++{
++  RNGHExternalScrollWeakHandler *association = nil;
++  if (handler) {
++    association = [RNGHExternalScrollWeakHandler new];
++    association.handler = handler;
++  }
++  objc_setAssociatedObject(recognizer, &auxiliaryHandlerKey, association, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++}
++UIScrollView *RNGHExternalScrollOwner(UIGestureRecognizer *recognizer) { return Registration(recognizer).scrollView; }
++UIView *RNGHExternalScrollOriginalView(UIGestureRecognizer *recognizer)
++{
++  RNGHExternalScrollRegistration *registration = Registration(recognizer);
++  return recognizer == registration.scrollView.panGestureRecognizer ? registration.panOriginalView : registration.handlerOriginalView;
++}
++void RNGHExternalScrollRecordTouches(UIGestureRecognizer *recognizer, NSSet<UITouch *> *touches)
++{
++  RNGHExternalScrollRegistration *registration = Registration(recognizer);
++  if (!registration) return;
++  for (UITouch *touch in touches) {
++    if (touch.view && ![touch.view isDescendantOfView:registration.scrollView]) registration.hasHeaderTouches = YES;
++  }
++}
++void RNGHExternalScrollResetTouches(UIGestureRecognizer *recognizer) { Registration(recognizer).hasHeaderTouches = NO; }
++void RNGHExternalScrollRecordHitView(UIGestureRecognizer *recognizer, UIView *hitView)
++{
++  RNGHExternalScrollRegistration *registration = Registration(recognizer);
++  if (registration && ![hitView isDescendantOfView:registration.scrollView]) registration.hasHeaderTouches = YES;
++}
++BOOL RNGHExternalScrollHasHeaderTouches(UIGestureRecognizer *recognizer) { return Registration(recognizer).hasHeaderTouches; }
++#endif
+diff --git a/apple/RNGestureHandler.mm b/apple/RNGestureHandler.mm
+index 6d746b641323cb1e0ff3d9d5f3f4ebd5541f40b6..7311e4b2d957fbd69eb116492544a0a8bf14ec45 100644
+--- a/apple/RNGestureHandler.mm
++++ b/apple/RNGestureHandler.mm
+@@ -1,4 +1,5 @@
+ #import "RNGestureHandler.h"
++#import "RNGHExternalScroll.h"
+ #import "RNManualActivationRecognizer.h"
+ 
+ #import "Handlers/RNNativeViewHandler.h"
+@@ -371,12 +372,19 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+  */
+ - (RNGHUIView *)chooseViewForInteraction:(UIGestureRecognizer *)recognizer
+ {
+-  return [self isViewParagraphComponent:recognizer.view] ? recognizer.view.subviews[0] : recognizer.view;
++  RNGHUIView *view = recognizer.view;
++#if !TARGET_OS_OSX
++  view = RNGHExternalScrollOriginalView(recognizer) ?: view;
++#endif
++  return [self isViewParagraphComponent:view] ? view.subviews[0] : view;
+ }
+ 
+ - (RNGHUIView *)coordinateView
+ {
+   RNGHUIView *recognizerView = _recognizer.view;
++#if !TARGET_OS_OSX
++  recognizerView = RNGHExternalScrollOriginalView(_recognizer) ?: recognizerView;
++#endif
+   if ([self usesNativeOrVirtualDetector] && recognizerView == self.hostDetectorView &&
+       recognizerView.subviews.count == 1) {
+     return recognizerView.subviews[0];
+@@ -591,7 +599,7 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+ 
+ - (RNGHUIView *)findViewForEvents
+ {
+-  return [self usesNativeOrVirtualDetector] ? self.hostDetectorView : self.recognizer.view;
++  return [self usesNativeOrVirtualDetector] ? self.hostDetectorView : [self chooseViewForInteraction:self.recognizer];
+ }
+ 
+ - (void)sendEvent:(RNGestureHandlerStateChange *)event
+@@ -624,7 +632,7 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+     [self.emitter sendEvent:event
+              withActionType:self.actionType
+              forHandlerType:[self eventHandlerType]
+-                    forView:self.recognizer.view];
++                    forView:[self chooseViewForInteraction:self.recognizer]];
+   }
+ }
+ 
+@@ -697,6 +705,9 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+ + (RNGestureHandler *)findGestureHandlerByRecognizer:(UIGestureRecognizer *)recognizer
+ {
+   RNGestureHandler *handler = recognizer.gestureHandler;
++#if !TARGET_OS_OSX
++  handler = RNGHExternalScrollHandler(recognizer) ?: handler;
++#endif
+   if (handler != nil) {
+     return handler;
+   }
+@@ -706,6 +717,11 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+   RNGHUIView *view = recognizer.view;
+   while (view != nil) {
+     for (UIGestureRecognizer *candidateRecognizer in view.gestureRecognizers) {
++#if !TARGET_OS_OSX
++      // An externally hosted dummy owns only its explicitly registered pan;
++      // do not adopt unrelated gestures attached to the common ancestor.
++      if (RNGHExternalScrollIsRegistered(candidateRecognizer)) continue;
++#endif
+       if ([candidateRecognizer isKindOfClass:[RNDummyGestureRecognizer class]]) {
+         return candidateRecognizer.gestureHandler;
+       }
+@@ -805,7 +821,11 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+   if ([self isUIScrollViewPanGestureRecognizer:otherGestureRecognizer] &&
+       [gestureRecognizer isKindOfClass:[RNDummyGestureRecognizer class]]) {
+     RNGHUIScrollView *scrollView = [self retrieveScrollView:gestureRecognizer.view];
++#if !TARGET_OS_OSX
++    if (scrollView && scrollView.panGestureRecognizer == otherGestureRecognizer) {
++#else
+     if (scrollView && scrollView == otherGestureRecognizer.view) {
++#endif
+       return YES;
+     }
+   }
+@@ -832,6 +852,10 @@ static NSHashTable<RNGestureHandler *> *allGestureHandlers;
+ 
+ - (RNGHUIScrollView *)retrieveScrollView:(RNGHUIView *)view
+ {
++#if !TARGET_OS_OSX
++  UIScrollView *externalOwner = RNGHExternalScrollViewOwner(view);
++  if (externalOwner) return externalOwner;
++#endif
+   if ([view isKindOfClass:[RCTEnhancedScrollView class]]) {
+     return (RCTEnhancedScrollView *)view;
+   }
+diff --git a/apple/RNGestureHandlerManager.mm b/apple/RNGestureHandlerManager.mm
+index ba06fea99f02b63daaf35211d605e200da72fa9f..ce65b568757640c6573cd7084b473d1acfe10fa5 100644
+--- a/apple/RNGestureHandlerManager.mm
++++ b/apple/RNGestureHandlerManager.mm
+@@ -9,6 +9,7 @@
+ #import <React/RCTViewManager.h>
+ 
+ #import "RNGestureHandler.h"
++#import "RNGHExternalScroll.h"
+ #import "RNGestureHandlerActionType.h"
+ #import "RNGestureHandlerEventHandlerType.h"
+ #import "RNGestureHandlerNativeEventUtils.h"
+@@ -373,6 +374,13 @@ static BOOL RNGHIsScreensTouchHandlerHost(RNGHUIView *view)
+   // particular if we have one PanHandler and ScrollView that can work simultaniously then when
+   // the Pan handler activates it would still tigger cancel events.
+   // Once the upstream fix lands the line below along with this comment can be removed
++#if !TARGET_OS_OSX
++  if (RNGHExternalScrollIsRegistered(gestureRecognizer)) {
++    // Header touches do not bubble through ScrollView.js and need root
++    // cancellation; list-origin streams retain RN scroll responder semantics.
++    if (!RNGHExternalScrollHasHeaderTouches(gestureRecognizer)) return;
++  } else
++#endif
+   if ([gestureRecognizer.view isKindOfClass:[RNGHScrollView class]]) {
+     return;
+   }
+diff --git a/apple/RNGestureHandlerPointerTracker.mm b/apple/RNGestureHandlerPointerTracker.mm
+index b2cb301fa12e8749079c176e7521b4a0321e9180..06d4e1c7c14e9c834df44113265d35ad7f2da041 100644
+--- a/apple/RNGestureHandlerPointerTracker.mm
++++ b/apple/RNGestureHandlerPointerTracker.mm
+@@ -1,5 +1,6 @@
+ #import "RNGestureHandlerPointerTracker.h"
+ #import "RNGestureHandler.h"
++#import "RNGHExternalScroll.h"
+ #import "RNGestureHandlerDetector.h"
+ 
+ #import <React/UIView+React.h>
+@@ -89,7 +90,8 @@
+   CGPoint absolutePos = CGPointMake(yFlippedAbsolutePos.x, windowHeight - yFlippedAbsolutePos.y);
+   CGPoint relativePos = [_gestureHandler.recognizer.view convertPoint:absolutePos fromView:touch.window.contentView];
+ #else
+-  CGPoint relativePos = [touch locationInView:_gestureHandler.recognizer.view];
++  UIView *coordinateOwner = RNGHExternalScrollOriginalView(_gestureHandler.recognizer) ?: _gestureHandler.recognizer.view;
++  CGPoint relativePos = [touch locationInView:coordinateOwner];
+   CGPoint absolutePos = [touch locationInView:_gestureHandler.recognizer.view.window];
+ #endif
+ 
+@@ -301,12 +303,13 @@
+   // the view's reactTag — they dispatch through the detector view — so a nil tag is not an
+   // obstacle for them. The virtual recognizer's view has no reactTag at all, so without this
+   // exemption virtual handlers would never deliver touch events.
+-  if (_gestureHandler.recognizer.view.reactTag == nil && ![_gestureHandler usesNativeOrVirtualDetector]) {
++  RNGHUIView *eventOwner = [_gestureHandler chooseViewForInteraction:_gestureHandler.recognizer];
++  if (eventOwner.reactTag == nil && ![_gestureHandler usesNativeOrVirtualDetector]) {
+     return;
+   }
+ 
+   [_gestureHandler sendTouchEventInState:[_gestureHandler state]
+-                          forViewWithTag:_gestureHandler.recognizer.view.reactTag];
++                          forViewWithTag:eventOwner.reactTag];
+ }
+ 
+ @end
