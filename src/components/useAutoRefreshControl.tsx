@@ -2,6 +2,7 @@ import React, { useCallback, useLayoutEffect, useReducer } from 'react';
 import {
   Platform,
   PlatformColor,
+  RefreshControl as RNRefreshControl,
   type RefreshControlProps,
 } from 'react-native';
 import { RefreshControl } from 'react-native-gesture-handler';
@@ -46,8 +47,8 @@ type RefreshShorthand = {
  * the Container so the custom pull can trigger and track the refresh — the
  * consumer API stays the plain `refreshControl` element either way.
  *
- * List `onRefresh`/`refreshing` shorthand creates the same gesture-aware
- * control before applying these fixes. Disabled controls keep their controlled
+ * List `onRefresh`/`refreshing` shorthand creates the control before applying
+ * these fixes: React Native's on iOS, the gesture-aware one elsewhere. Disabled controls keep their controlled
  * refreshing state but never register a custom refresh callback. For native
  * controls, a consumer-provided `progressViewOffset` always wins.
  */
@@ -56,10 +57,16 @@ export function useAutoRefreshControl(
   nativeGesture?: object,
   shorthand?: RefreshShorthand
 ): RefreshControlElement | undefined {
+  // iOS only needs a tint and offset from the control, so shorthand skips the
+  // gesture-aware wrapper's extra Native handler there (experimental: pending
+  // device verification). Android needs it for `block` and the pager wait, and
+  // web keeps it so the stock-control omission below still applies.
+  const ShorthandControl =
+    Platform.OS === 'ios' ? RNRefreshControl : RefreshControl;
   const control =
     refreshControl ??
     (shorthand?.onRefresh ? (
-      <RefreshControl
+      <ShorthandControl
         refreshing={!!shorthand.refreshing}
         onRefresh={shorthand.onRefresh}
         progressViewOffset={shorthand.progressViewOffset}

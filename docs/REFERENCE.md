@@ -309,7 +309,7 @@ Render an overlay like this as a sibling of the list inside a tab. `contentTop` 
 
 ### Pull to refresh
 
-FlatList, FlashList, and LegendList accept `onRefresh` / `refreshing` shorthand. All four adapters accept an explicit `refreshControl`, which takes precedence over shorthand. ScrollView uses the explicit control.
+FlatList, FlashList, and LegendList accept `onRefresh` / `refreshing` shorthand. All four adapters accept an explicit `refreshControl`, which takes precedence over shorthand. ScrollView uses the explicit control. On Android and web, shorthand creates Gesture Handler's control; on iOS it creates React Native's own `RefreshControl` (experimental).
 
 `refreshing` is controlled: set it to `true` synchronously in `onRefresh`, before awaiting your request, and back to `false` in a `finally` block when the request finishes. Leaving it `false` dismisses the indicator. Keep state per tab when tabs refresh independently. Android's custom stretch mode honors `enabled={false}` for new refresh requests while retaining controlled refreshing state; static mode forwards `enabled` to the native control.
 

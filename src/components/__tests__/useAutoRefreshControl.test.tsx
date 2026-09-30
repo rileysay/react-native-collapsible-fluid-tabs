@@ -3,7 +3,11 @@
 
 import { act, useCallback, useLayoutEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Platform, type RefreshControlProps } from 'react-native';
+import {
+  Platform,
+  RefreshControl as RNRefreshControl,
+  type RefreshControlProps,
+} from 'react-native';
 import { RefreshControl } from 'react-native-gesture-handler';
 
 import { useTabIndex, useTabsContext } from '../../context';
@@ -13,6 +17,7 @@ import { useAutoRefreshControl } from '../useAutoRefreshControl';
 jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
   PlatformColor: (name: string) => ({ semantic: [name] }),
+  RefreshControl: jest.fn(() => null),
 }));
 jest.mock('react-native-gesture-handler', () => ({
   RefreshControl: jest.fn(() => null),
@@ -259,6 +264,22 @@ describe('native control preparation', () => {
       progressViewOffset: 12,
     });
     expect(reportRefreshConfig).not.toHaveBeenCalled();
+  });
+
+  it("creates React Native's control from list shorthand on iOS", () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    const onRefresh = jest.fn();
+    renderProbe({
+      shorthand: { refreshing: true, onRefresh, progressViewOffset: 12 },
+    });
+
+    expect(result?.type).toBe(RNRefreshControl);
+    expect(result?.props).toMatchObject({
+      refreshing: true,
+      onRefresh,
+      progressViewOffset: 12,
+      tintColor: { semantic: ['secondaryLabel'] },
+    });
   });
 
   it('gives an explicit control precedence over all shorthand values', () => {
