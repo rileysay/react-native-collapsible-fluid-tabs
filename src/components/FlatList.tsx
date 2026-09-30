@@ -35,8 +35,10 @@ const ListDetector = GestureDetector;
 
 export type TabsFlatListProps<T> = Omit<
   FlatListProps<T>,
-  'onScroll' | 'scrollEventThrottle' | 'ref'
+  'onScroll' | 'scrollEventThrottle' | 'ref' | 'CellRendererComponent'
 > & {
+  /** Unsupported: Reanimated's Animated.FlatList supplies its own cell renderer. */
+  CellRendererComponent?: never;
   minContentHeight?: number;
 };
 
