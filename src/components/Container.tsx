@@ -523,7 +523,6 @@ function usePagerGestures({
   tabCount,
   activeIndex,
   momentumActive,
-  grabCatch,
   listRefs,
   listMounted,
   perPageScrollY,
@@ -562,7 +561,6 @@ function usePagerGestures({
   tabCount: number;
   activeIndex: SharedValue<number>;
   momentumActive: SharedValue<boolean>;
-  grabCatch: SharedValue<boolean>;
   listRefs: AnimatedRef<any>[];
   listMounted: SharedValue<boolean>[];
   perPageScrollY: SharedValue<number>[];
@@ -675,7 +673,6 @@ function usePagerGestures({
           }
           pagerDirection.onTouchesDown(e);
           if (!momentumActive.value) return;
-          grabCatch.value = true;
           momentumActive.value = false;
           if (NEEDS_EXPLICIT_GRAB_STOP) {
             const i = clampTabIndex(activeIndex.value, tabCount);
@@ -761,7 +758,6 @@ function usePagerGestures({
         onFinalize: () => {
           'worklet';
           isPanning.value = false;
-          grabCatch.value = false;
         },
       }),
       [
@@ -783,7 +779,6 @@ function usePagerGestures({
         headerHeight,
         pullDownBehavior,
         momentumActive,
-        grabCatch,
         listRefs,
         listMounted,
         translateX,
@@ -1692,7 +1687,6 @@ function ContainerImpl(props: ContainerImplProps) {
   const nativePaging = useSharedValue(false);
   const pillWidth = useSharedValue(0);
   const momentumActive = useSharedValue(false);
-  const grabCatch = useSharedValue(false);
 
   const usesCustomPull = IS_ANDROID && pullDownBehavior === 'stretch';
   const usesCustomPullSV = useSharedValue(usesCustomPull);
@@ -1886,7 +1880,6 @@ function ContainerImpl(props: ContainerImplProps) {
       tabCount,
       activeIndex,
       momentumActive,
-      grabCatch,
       listRefs,
       listMounted,
       perPageScrollY,
