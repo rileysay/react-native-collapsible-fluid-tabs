@@ -1,25 +1,19 @@
 import React, { useImperativeHandle } from 'react';
 import {
-  Platform,
+  View,
   type ScrollViewProps,
   type ScrollView as RNScrollView,
-  View,
 } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
-import { useTabIndex, useTabsContext } from '../context';
-import { FOOTER_GAP } from '../constants';
-import { useAutoRefreshControl } from './useAutoRefreshControl';
-import { useTrackedScrollRef } from './useTrackedScrollRef';
-import { useListScrollMetrics } from './useListScrollMetrics';
 import { SingleHeaderPage } from './SingleHeader';
+import {
+  ListDetector,
+  USE_DIRECT_WEB_SCROLL,
+  omitTabListProps,
+  useTabList,
+} from './useTabList';
 
-// On web the browser scroll view should stay a plain DOM scroller; wrapping it
-// in a Native GestureDetector steals horizontal pointer drags from the pager.
-const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
-// Host the list's Native gesture on its scrollable component.
-const ListDetector = GestureDetector;
 type NativeScrollViewRef = React.ComponentRef<typeof RNScrollView>;
 
 export type TabsScrollViewProps = Omit<
@@ -35,46 +29,11 @@ export type TabsScrollViewProps = Omit<
 export function ScrollView(
   props: TabsScrollViewProps & { ref?: React.Ref<NativeScrollViewRef> }
 ): React.ReactElement {
-  const {
-    ref: forwardedRef,
-    minContentHeight,
-    onScrollBeginDrag,
-    onLayout,
-    onContentSizeChange,
-    onMomentumScrollBegin,
-    onMomentumScrollEnd,
-    ...scrollProps
-  } = props;
-  const ctx = useTabsContext();
-  const index = useTabIndex();
-  const scrollMetrics = useListScrollMetrics(ctx.listScrollMetrics[index]!, {
-    onLayout,
-    onContentSizeChange,
-    scrollEnabled: props.scrollEnabled,
-    decelerationRate: props.decelerationRate,
-  });
-  const {
-    listRefs,
-    listMounted,
-    scrollHandlers,
-    listNativeGestures,
-    headerHeight,
-    pinnedHeaderHeight,
-    topInset,
-    tabBarHeight,
-    bottomInset,
-    minPageContentHeight,
-  } = ctx;
-
-  const ref = listRefs[index] as React.Ref<NativeScrollViewRef>;
-  const trackedRef = useTrackedScrollRef(listRefs[index], listMounted[index]);
-  const scrollHandler = scrollHandlers[index];
-  // Container creates one Native gesture for every registered tab index.
-  const nativeGesture = listNativeGestures[index]!;
-  const refreshControl = useAutoRefreshControl(
-    props.refreshControl,
-    nativeGesture
-  );
+  const { ref: forwardedRef, ...consumerProps } = props;
+  const scrollProps = omitTabListProps(consumerProps);
+  // ScrollView takes an explicit refreshControl only; there is no shorthand.
+  const page = useTabList(props);
+  const ref = page.listRef as React.Ref<NativeScrollViewRef>;
 
   useImperativeHandle(
     forwardedRef,
@@ -83,48 +42,22 @@ export function ScrollView(
     [ref]
   );
 
-  const headerSpacerStyle = useAnimatedStyle(() => ({
-    height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
-  }));
-
-  // Static per layout (no shared values), so a plain View — an animated
-  // style here would register a do-nothing Reanimated mapper per page.
-  // Just the safe-area inset + breathing room: the tab bar is top chrome
-  // and never overlaps the list bottom.
-  const footerSpacerHeight = bottomInset + FOOTER_GAP;
-
-  const minHeight = minContentHeight ?? minPageContentHeight;
-
-  const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
-
   const AnimatedScrollView =
     Animated.ScrollView as unknown as React.ComponentType<any>;
 
-  // Reanimated inserts momentum listeners while filtering onScroll. Append
-  // supplied callbacks after it; an undefined prop would disable its listener.
   const scrollView = (
     <AnimatedScrollView
       {...scrollProps}
-      ref={trackedRef}
-      refreshControl={refreshControl}
-      onScroll={scrollHandler}
-      {...(onScrollBeginDrag ? { onScrollBeginDrag } : {})}
-      {...(onMomentumScrollBegin ? { onMomentumScrollBegin } : {})}
-      {...(onMomentumScrollEnd ? { onMomentumScrollEnd } : {})}
-      scrollEventThrottle={1}
-      {...scrollMetrics}
-      overScrollMode={props.overScrollMode ?? 'never'}
-      directionalLockEnabled={props.directionalLockEnabled ?? true}
-      nestedScrollEnabled={props.nestedScrollEnabled ?? true}
-      showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
-      contentContainerStyle={contentContainerStyle}
+      ref={page.trackedRef}
+      refreshControl={page.refreshControl}
+      {...page.scrollProps}
       stickyHeaderIndices={props.stickyHeaderIndices?.map(
         (childIndex) => childIndex + 1
       )}
     >
-      <Animated.View style={headerSpacerStyle} />
+      <Animated.View style={page.headerSpacerStyle} />
       {props.children}
-      <View style={{ height: footerSpacerHeight }} />
+      <View style={{ height: page.footerSpacerHeight }} />
     </AnimatedScrollView>
   );
 
@@ -132,7 +65,7 @@ export function ScrollView(
 
   return (
     <SingleHeaderPage>
-      <ListDetector gesture={nativeGesture}>{scrollView}</ListDetector>
+      <ListDetector gesture={page.nativeGesture}>{scrollView}</ListDetector>
     </SingleHeaderPage>
   );
 }

@@ -1,32 +1,22 @@
-import React, { useLayoutEffect, useImperativeHandle, useMemo } from 'react';
+import React, { useLayoutEffect, useImperativeHandle } from 'react';
 import {
   Platform,
-  View,
   type FlatListProps,
   type FlatList as RNFlatList,
 } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle,
-  type AnimatedRef,
-} from 'react-native-reanimated';
+import Animated, { type AnimatedRef } from 'react-native-reanimated';
 
-import { useTabIndex, useTabsContext } from '../context';
-import { FOOTER_GAP } from '../constants';
-import { renderListComponent } from '../utils/renderListComponent';
-import { useAutoRefreshControl } from './useAutoRefreshControl';
-import { useTrackedScrollRef } from './useTrackedScrollRef';
-import { useListScrollMetrics } from './useListScrollMetrics';
 import {
   isNativeHeaderScrollEnabled,
   useSingleHeaderScrollComponent,
 } from './SingleHeader';
-
-// On web the browser scroll view should stay a plain DOM scroller; wrapping it
-// in a Native GestureDetector steals horizontal pointer drags from the pager.
-const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
-// Host the list's Native gesture on its scrollable component.
-const ListDetector = GestureDetector;
+import {
+  ListDetector,
+  USE_DIRECT_WEB_SCROLL,
+  omitTabListProps,
+  useListSpacers,
+  useTabList,
+} from './useTabList';
 
 export type TabsFlatListProps<T> = Omit<
   FlatListProps<T>,
@@ -40,49 +30,15 @@ export type TabsFlatListProps<T> = Omit<
 export function FlatList<T>(
   props: TabsFlatListProps<T> & { ref?: React.Ref<RNFlatList<T>> }
 ): React.ReactElement {
-  const {
-    ref: forwardedRef,
-    onRefresh,
-    refreshing,
-    progressViewOffset,
-    minContentHeight,
-    onScrollBeginDrag,
-    onLayout,
-    onContentSizeChange,
-    onMomentumScrollBegin,
-    onMomentumScrollEnd,
-    ...listProps
-  } = props;
-  const ctx = useTabsContext();
-  const index = useTabIndex();
-  const scrollMetrics = useListScrollMetrics(ctx.listScrollMetrics[index]!, {
-    onLayout,
-    onContentSizeChange,
-    scrollEnabled: props.scrollEnabled,
-    decelerationRate: props.decelerationRate,
+  const { ref: forwardedRef, ...consumerProps } = props;
+  const listProps = omitTabListProps(consumerProps);
+  const page = useTabList(props, {
+    onRefresh: props.onRefresh,
+    refreshing: props.refreshing,
+    progressViewOffset: props.progressViewOffset,
   });
-  const {
-    listRefs,
-    listMounted,
-    listNativeGestures,
-    scrollHandlers,
-    headerHeight,
-    pinnedHeaderHeight,
-    topInset,
-    tabBarHeight,
-    bottomInset,
-    minPageContentHeight,
-  } = ctx;
-
-  const ref = listRefs[index] as AnimatedRef<RNFlatList<T>>;
-  const trackedRef = useTrackedScrollRef(ref, listMounted[index]);
-  // Container creates one Native gesture for every registered tab index.
-  const nativeGesture = listNativeGestures[index]!;
-  const refreshControl = useAutoRefreshControl(
-    props.refreshControl,
-    nativeGesture,
-    { onRefresh, refreshing, progressViewOffset }
-  );
+  const { trackedRef, nativeGesture, refreshControl } = page;
+  const ref = page.listRef as AnimatedRef<RNFlatList<T>>;
 
   // Android replaces the inner native scroll view when its refresh wrapper
   // changes, while the outer FlatList ref stays attached. Refresh the animated
@@ -99,41 +55,11 @@ export function FlatList<T>(
     [ref]
   );
 
-  const headerSpacerStyle = useAnimatedStyle(() => ({
-    height: headerHeight.value + pinnedHeaderHeight + topInset + tabBarHeight,
-  }));
-
-  // Static per layout (no shared values), so a plain View — an animated
-  // style here would register a do-nothing Reanimated mapper per page.
-  // Just the safe-area inset + breathing room: the tab bar is top chrome and
-  // never overlaps the list bottom.
-  const footerSpacerHeight = bottomInset + FOOTER_GAP;
-
-  const userListHeader = props.ListHeaderComponent;
-  const userListFooter = props.ListFooterComponent;
-
-  const ListHeaderComponent = useMemo(
-    () => (
-      <>
-        <Animated.View style={headerSpacerStyle} />
-        {renderListComponent(userListHeader)}
-      </>
-    ),
-    [headerSpacerStyle, userListHeader]
+  const { ListHeaderComponent, ListFooterComponent } = useListSpacers(
+    page,
+    props.ListHeaderComponent,
+    props.ListFooterComponent
   );
-
-  const ListFooterComponent = useMemo(
-    () => (
-      <>
-        {renderListComponent(userListFooter)}
-        <View style={{ height: footerSpacerHeight }} />
-      </>
-    ),
-    [userListFooter, footerSpacerHeight]
-  );
-
-  const minHeight = minContentHeight ?? minPageContentHeight;
-  const contentContainerStyle = [{ minHeight }, props.contentContainerStyle];
   const renderScrollComponent = useSingleHeaderScrollComponent(
     listProps.renderScrollComponent,
     nativeGesture
@@ -150,19 +76,9 @@ export function FlatList<T>(
       // The animated event manager follows inner native view replacements.
       // Observing only the outer ref leaves listeners on the old Android view
       // after switching between native refresh and stretched pull.
-      onScroll={scrollHandlers[index]}
-      {...(onScrollBeginDrag ? { onScrollBeginDrag } : {})}
-      {...(onMomentumScrollBegin ? { onMomentumScrollBegin } : {})}
-      {...(onMomentumScrollEnd ? { onMomentumScrollEnd } : {})}
-      scrollEventThrottle={1}
-      {...scrollMetrics}
-      overScrollMode={props.overScrollMode ?? 'never'}
-      directionalLockEnabled={props.directionalLockEnabled ?? true}
-      nestedScrollEnabled={props.nestedScrollEnabled ?? true}
-      showsVerticalScrollIndicator={props.showsVerticalScrollIndicator ?? false}
+      {...page.scrollProps}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}
-      contentContainerStyle={contentContainerStyle}
     />
   );
 
