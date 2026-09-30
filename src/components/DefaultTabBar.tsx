@@ -247,9 +247,10 @@ function FitBar({
   pillWidth,
   pullPanGesture,
 }: BarProps & { pillWidth: SharedValue<number> }) {
+  const tabCount = tabs.length;
   const pillStyle = useAnimatedStyle(() => {
     'worklet';
-    const maxOffset = (tabs.length - 1) * pillWidth.value;
+    const maxOffset = (tabCount - 1) * pillWidth.value;
     const clampedX = Math.max(
       0,
       Math.min(pagerOffset.value * pillWidth.value, maxOffset)
@@ -304,6 +305,7 @@ function ScrollableBar({
   containerWidth,
   pullPanGesture,
 }: BarProps) {
+  const tabCount = tabs.length;
   const scrollRef = useAnimatedRef<ScrollView>();
   const reduceMotion = useReducedMotion();
   // Measured { x, width } for each tab, in content coordinates — drives the
@@ -322,14 +324,14 @@ function ScrollableBar({
   const pillStyle = useAnimatedStyle(() => {
     'worklet';
     const layouts = tabLayouts.value;
-    if (layouts.length < tabs.length) {
+    if (layouts.length < tabCount) {
       return { opacity: 0, width: 0, transform: [{ translateX: 0 }] };
     }
-    const offset = Math.max(0, Math.min(pagerOffset.value, tabs.length - 1));
+    const offset = Math.max(0, Math.min(pagerOffset.value, tabCount - 1));
     const i = Math.floor(offset);
     const f = offset - i;
     const a = layouts[i]!;
-    const b = layouts[Math.min(i + 1, tabs.length - 1)]!;
+    const b = layouts[Math.min(i + 1, tabCount - 1)]!;
     return {
       opacity: 1,
       width: a.width + (b.width - a.width) * f,
@@ -349,8 +351,8 @@ function ScrollableBar({
     },
     ({ index: i, layouts }, previous) => {
       'worklet';
-      if (layouts.length < tabs.length) return;
-      const tab = layouts[Math.max(0, Math.min(i, tabs.length - 1))]!;
+      if (layouts.length < tabCount) return;
+      const tab = layouts[Math.max(0, Math.min(i, tabCount - 1))]!;
       const target = tab.x + tab.width / 2 - containerWidth / 2;
       scrollTo(
         scrollRef,
