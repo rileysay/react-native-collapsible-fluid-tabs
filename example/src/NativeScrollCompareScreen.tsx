@@ -1,5 +1,13 @@
-import { useCallback } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState, type ReactNode } from 'react';
+import {
+  Image,
+  Pressable,
+  RefreshControl as RNRefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { RefreshControl } from 'react-native-gesture-handler';
 import {
   Tabs as BetaTabs,
@@ -49,6 +57,120 @@ function diag(...args: unknown[]) {
   if (__DEV__) console.log('[header-scroll]', ...args);
 }
 
+// Metro-only fixtures for the device checks. Changing one remounts the tabs.
+type Fixture = {
+  pull: 'stretch' | 'static';
+  refresh: 'element' | 'shorthand' | 'rn';
+  start: 0 | 1;
+  inlineRenderer: boolean;
+};
+
+const DEFAULT_FIXTURE: Fixture = {
+  pull: 'stretch',
+  refresh: 'element',
+  start: 0,
+  inlineRenderer: false,
+};
+
+const REFRESH_LABEL: Record<Fixture['refresh'], string> = {
+  element: 'GH element',
+  shorthand: 'shorthand',
+  rn: 'RN element',
+};
+
+const NEXT_REFRESH: Record<Fixture['refresh'], Fixture['refresh']> = {
+  element: 'shorthand',
+  shorthand: 'rn',
+  rn: 'element',
+};
+
+type RefreshState = { refreshing: boolean; onRefresh: () => void };
+
+// ScrollView has no shorthand, so it keeps an element in shorthand mode.
+function refreshProps(
+  mode: Fixture['refresh'],
+  state: RefreshState,
+  allowShorthand = true
+) {
+  if (mode === 'shorthand' && allowShorthand) return state;
+  const Control = mode === 'rn' ? RNRefreshControl : RefreshControl;
+  return { refreshControl: <Control {...state} /> };
+}
+
+// A new function on every render, as an app passing an inline renderer would.
+function inlineRenderer(enabled: boolean) {
+  return enabled
+    ? {
+        renderScrollComponent: (props: object) => <ScrollView {...props} />,
+      }
+    : {};
+}
+
+function Chip({
+  children,
+  onPress,
+}: {
+  children: ReactNode;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={s.chip} onPress={onPress}>
+      <Text style={s.chipText}>{children}</Text>
+    </Pressable>
+  );
+}
+
+function FixtureBar({
+  fixture,
+  onChange,
+  renders,
+  onRerender,
+  pointerEvents,
+}: {
+  fixture: Fixture;
+  onChange: (fixture: Fixture) => void;
+  renders: number;
+  onRerender: () => void;
+  pointerEvents: 'box-none' | 'auto';
+}) {
+  return (
+    <View style={s.fixtures} pointerEvents={pointerEvents}>
+      <Chip
+        onPress={() =>
+          onChange({
+            ...fixture,
+            pull: fixture.pull === 'stretch' ? 'static' : 'stretch',
+          })
+        }
+      >
+        Pull: {fixture.pull}
+      </Chip>
+      <Chip
+        onPress={() =>
+          onChange({ ...fixture, refresh: NEXT_REFRESH[fixture.refresh] })
+        }
+      >
+        Refresh: {REFRESH_LABEL[fixture.refresh]}
+      </Chip>
+      <Chip
+        onPress={() =>
+          onChange({ ...fixture, start: fixture.start === 0 ? 1 : 0 })
+        }
+      >
+        Start: {fixture.start === 0 ? 'Looks' : 'Posts'}
+      </Chip>
+      <Chip
+        onPress={() =>
+          onChange({ ...fixture, inlineRenderer: !fixture.inlineRenderer })
+        }
+      >
+        Inline renderer: {fixture.inlineRenderer ? 'on' : 'off'}
+      </Chip>
+      <Chip onPress={onRerender}>Re-render ({renders})</Chip>
+    </View>
+  );
+}
+
 // Pass-through demo: only buttons take a touch. Everything else lets it fall
 // to the list underneath, which then scrolls natively.
 function pointerEventsFor(version: CompareVersion) {
@@ -59,7 +181,13 @@ function pointerEventsFor(version: CompareVersion) {
   };
 }
 
-function CompareHeader({ version }: { version: CompareVersion }) {
+function CompareHeader({
+  version,
+  fixtures,
+}: {
+  version: CompareVersion;
+  fixtures: ReactNode;
+}) {
   const pe = pointerEventsFor(version);
   return (
     <View style={s.header} pointerEvents={pe.container}>
@@ -88,6 +216,7 @@ function CompareHeader({ version }: { version: CompareVersion }) {
       <Button label="Edit profile" onPress={noop} dark style={s.action}>
         Edit profile
       </Button>
+      {fixtures}
       <View style={s.noteWrap} pointerEvents={pe.decoration}>
         <Text style={s.note}>{COPY[version].note}</Text>
       </View>
@@ -152,10 +281,26 @@ export function NativeScrollCompareScreen({
   const posts = useDemoRefresh();
   const saved = useDemoRefresh();
   const about = useDemoRefresh();
+  const [fixture, setFixture] = useState(DEFAULT_FIXTURE);
+  // Re-renders the screen without remounting the tabs.
+  const [renders, setRenders] = useState(0);
 
   const renderHeader = useCallback(
-    () => <CompareHeader version={version} />,
-    [version]
+    () => (
+      <CompareHeader
+        version={version}
+        fixtures={
+          <FixtureBar
+            fixture={fixture}
+            onChange={setFixture}
+            renders={renders}
+            onRerender={() => setRenders((count) => count + 1)}
+            pointerEvents={pointerEventsFor(version).container}
+          />
+        }
+      />
+    ),
+    [fixture, renders, version]
   );
   const renderPinnedHeader = useCallback(
     ({ topInset }: HeaderRenderProps) => {
@@ -193,11 +338,13 @@ export function NativeScrollCompareScreen({
   return (
     <View style={s.screen}>
       <Tabs.Container
+        key={JSON.stringify(fixture)}
+        initialIndex={fixture.start}
         renderHeader={renderHeader}
         renderPinnedHeader={renderPinnedHeader}
         pinnedHeaderHeight={56}
         estimatedHeaderHeight={360}
-        pullDownBehavior="stretch"
+        pullDownBehavior={fixture.pull}
         // The pass-through demo lets touches reach the list instead of the
         // library's JavaScript header drag, which claims header touches by position.
         headerScrollEnabled={version !== 'passThrough'}
@@ -212,7 +359,8 @@ export function NativeScrollCompareScreen({
             numColumns={2}
             recycleItems
             getItemType={photoItemType}
-            refreshControl={<RefreshControl {...looks} />}
+            {...refreshProps(fixture.refresh, looks)}
+            {...inlineRenderer(fixture.inlineRenderer)}
             {...momentum('looks')}
           />
         </Tabs.Tab>
@@ -221,7 +369,8 @@ export function NativeScrollCompareScreen({
             data={POSTS}
             keyExtractor={keyById}
             renderItem={renderPost}
-            refreshControl={<RefreshControl {...posts} />}
+            {...refreshProps(fixture.refresh, posts)}
+            {...inlineRenderer(fixture.inlineRenderer)}
             {...momentum('posts')}
           />
         </Tabs.Tab>
@@ -231,13 +380,13 @@ export function NativeScrollCompareScreen({
             keyExtractor={keyById}
             renderItem={renderSaved}
             numColumns={3}
-            refreshControl={<RefreshControl {...saved} />}
+            {...refreshProps(fixture.refresh, saved)}
             {...momentum('saved')}
           />
         </Tabs.Tab>
         <Tabs.Tab name="about" label="About">
           <Tabs.ScrollView
-            refreshControl={<RefreshControl {...about} />}
+            {...refreshProps(fixture.refresh, about, false)}
             {...momentum('about')}
           >
             <View style={s.about}>
@@ -249,10 +398,14 @@ export function NativeScrollCompareScreen({
                 'Fling a list, then touch the header to catch it mid-scroll.',
                 'Swipe between tabs and immediately drag the header.',
                 'Looks is a LegendList, Posts a FlatList, Saved a FlashList and this tab a ScrollView.',
-              ].map((line) => (
-                <Text key={line} style={s.aboutLine}>
-                  {line}
-                </Text>
+                'Fixture chips in the header switch pull mode, refresh style, start tab and an inline list renderer. Re-render updates the screen without remounting the lists.',
+              ].map((line, index) => (
+                <Pressable
+                  key={line}
+                  onPress={() => diag('row tap', 'about', index)}
+                >
+                  <Text style={s.aboutLine}>{line}</Text>
+                </Pressable>
               ))}
             </View>
           </Tabs.ScrollView>
@@ -337,4 +490,19 @@ const s = StyleSheet.create({
   about: { padding: 20, gap: 12 },
   aboutTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
   aboutLine: { fontSize: 15, lineHeight: 22, color: colors.ink },
+  fixtures: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.line,
+  },
+  chipText: { fontSize: 12, fontWeight: '600', color: colors.ink },
 });

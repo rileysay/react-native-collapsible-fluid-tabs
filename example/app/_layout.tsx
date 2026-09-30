@@ -7,7 +7,13 @@ import { PhonePreviewSafeArea } from '../src/PhonePreviewSafeArea';
 
 // iOS builds that include the local module get native header scrolling in
 // every demo. Other builds pass null and keep the JavaScript header drag.
-registerNativeHeaderScroll(nativeHeaderScrollViews);
+// Start Metro with EXPO_PUBLIC_NATIVE_HEADER_SCROLL=off to try this branch's
+// JavaScript header drag in the same build.
+registerNativeHeaderScroll(
+  process.env.EXPO_PUBLIC_NATIVE_HEADER_SCROLL === 'off'
+    ? null
+    : nativeHeaderScrollViews
+);
 
 export default function Layout() {
   const pathname = usePathname();
