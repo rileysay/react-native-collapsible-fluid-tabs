@@ -64,11 +64,8 @@ export function FlatList<T>(
     listProps.renderScrollComponent,
     nativeGesture
   );
-  const AnimatedFlatList =
-    Animated.FlatList as unknown as React.ComponentType<any>;
-
   const list = (
-    <AnimatedFlatList
+    <Animated.FlatList
       {...listProps}
       renderScrollComponent={renderScrollComponent}
       ref={trackedRef}

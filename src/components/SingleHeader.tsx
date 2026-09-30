@@ -125,7 +125,6 @@ export function SingleHeaderPage({ children }: { children: ReactNode }) {
   );
 }
 
-type RenderScrollComponent<P> = ((props: P) => ReactElement | null) | undefined;
 type ScrollRef = React.ComponentRef<typeof ScrollView>;
 type ScrollRenderer = (props: object) => ReactElement | null;
 
@@ -167,10 +166,13 @@ function SingleHeaderScroll({
  * Wraps a virtualized list's scroll renderer in its page registration and
  * Native gesture detector. The list's ref stays on the actual ScrollView.
  */
-export function useSingleHeaderScrollComponent<P extends object>(
-  render: RenderScrollComponent<P>,
+export function useSingleHeaderScrollComponent<
+  P extends object = ScrollViewProps,
+  E extends ReactElement | null = ReactElement<P>,
+>(
+  render: ((props: P) => E) | undefined,
   nativeGesture: NativeGesture
-): RenderScrollComponent<P> {
+): ((props: P) => E | ReactElement<P>) | undefined {
   const enabled = isNativeHeaderScrollEnabled();
   return useMemo(() => {
     if (!enabled) return render;
@@ -179,12 +181,13 @@ export function useSingleHeaderScrollComponent<P extends object>(
     // VirtualizedList clones the returned element with its ref and item cells.
     // Keep that replaceable boundary outside the registration and detector so
     // the clone cannot replace the actual scroll view with bare list children.
-    return (props: P) => (
+    const renderPage = (props: P): ReactElement<P> => (
       <SingleHeaderScroll
         {...props}
         fluidTabsRenderScroll={renderScroll}
         fluidTabsNativeGesture={nativeGesture}
       />
     );
+    return renderPage;
   }, [enabled, render, nativeGesture]);
 }

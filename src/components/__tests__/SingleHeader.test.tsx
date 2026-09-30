@@ -140,7 +140,7 @@ describe('native header scroll registration', () => {
 
 describe('useSingleHeaderScrollComponent', () => {
   it('returns the list renderer unchanged without native registration', () => {
-    const render = jest.fn(() => null);
+    const render = jest.fn(() => <></>);
     let result: unknown;
     function Probe() {
       result = useSingleHeaderScrollComponent(render, gesture);

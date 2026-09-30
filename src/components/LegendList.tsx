@@ -32,7 +32,9 @@ function renderWebScrollComponent(
 // Metro treats it as an optional dependency (`allowOptionalDependencies`, on
 // by default in Expo / RN CLI configs) and consumers without it installed can
 // still import the library. Only rendering Tabs.LegendList requires it.
-let AnimatedLegendList: React.ComponentType<any> | null = null;
+let AnimatedLegendList:
+  | typeof import('@legendapp/list/reanimated').AnimatedLegendList
+  | null = null;
 try {
   AnimatedLegendList = require('@legendapp/list/reanimated').AnimatedLegendList;
 } catch {
@@ -100,10 +102,8 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
       (Platform.OS === 'web' ? renderWebScrollComponent : undefined),
     nativeGesture
   );
-  const Component = AnimatedLegendList as unknown as React.ComponentType<any>;
-
   const list = (
-    <Component
+    <AnimatedLegendList
       {...listProps}
       style={style}
       renderScrollComponent={renderScrollComponent}

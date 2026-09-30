@@ -22,7 +22,7 @@ export const USE_DIRECT_WEB_SCROLL = Platform.OS === 'web';
 export const ListDetector = GestureDetector;
 
 /** Props every adapter reads itself before forwarding the rest to its list. */
-export type TabListInput = Pick<
+export type TabListInput<Style> = Pick<
   ScrollViewProps,
   | 'onScrollBeginDrag'
   | 'onMomentumScrollBegin'
@@ -36,7 +36,7 @@ export type TabListInput = Pick<
   | 'nestedScrollEnabled'
   | 'showsVerticalScrollIndicator'
 > & {
-  contentContainerStyle?: unknown;
+  contentContainerStyle?: Style;
   minContentHeight?: number;
   refreshControl?: ReactElement<RefreshControlProps>;
 };
@@ -67,8 +67,8 @@ export function omitTabListProps<P extends object>(
  * page ref and Native gesture, the refresh control, chrome spacer sizes, and
  * the scroll props each list receives after the consumer's own props.
  */
-export function useTabList(
-  props: TabListInput,
+export function useTabList<Style>(
+  props: TabListInput<Style>,
   shorthand?: Parameters<typeof useAutoRefreshControl>[2]
 ) {
   const ctx = useTabsContext();
@@ -132,7 +132,10 @@ export function useTabList(
     directionalLockEnabled: props.directionalLockEnabled ?? true,
     nestedScrollEnabled: props.nestedScrollEnabled ?? true,
     showsVerticalScrollIndicator: props.showsVerticalScrollIndicator ?? false,
-    contentContainerStyle: [{ minHeight }, props.contentContainerStyle],
+    contentContainerStyle: [{ minHeight }, props.contentContainerStyle] as [
+      { minHeight: number },
+      Style | undefined,
+    ],
   };
 
   return {
@@ -152,7 +155,7 @@ export function useListSpacers(
     headerSpacerStyle,
     footerSpacerHeight,
   }: Pick<
-    ReturnType<typeof useTabList>,
+    ReturnType<typeof useTabList<unknown>>,
     'headerSpacerStyle' | 'footerSpacerHeight'
   >,
   userHeader: unknown,

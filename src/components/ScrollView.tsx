@@ -42,11 +42,8 @@ export function ScrollView(
     [ref]
   );
 
-  const AnimatedScrollView =
-    Animated.ScrollView as unknown as React.ComponentType<any>;
-
   const scrollView = (
-    <AnimatedScrollView
+    <Animated.ScrollView
       {...scrollProps}
       ref={page.trackedRef}
       refreshControl={page.refreshControl}
@@ -58,7 +55,7 @@ export function ScrollView(
       <Animated.View style={page.headerSpacerStyle} />
       {props.children}
       <View style={{ height: page.footerSpacerHeight }} />
-    </AnimatedScrollView>
+    </Animated.ScrollView>
   );
 
   if (USE_DIRECT_WEB_SCROLL) return scrollView;
