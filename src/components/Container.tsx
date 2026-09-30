@@ -69,7 +69,7 @@ import { useDirectionalPan } from './useDirectionalPan';
 import { useHeaderScroll, type HeaderScroll } from './useHeaderScroll';
 import { useWebContentDrag } from './useWebContentDrag';
 import { useWebWheelScroll } from './useWebWheelScroll';
-import { scrollToMountedRef } from '../utils/scrollRef';
+import { scrollToMountedRef, stopScrollAtOffset } from '../utils/scrollRef';
 import {
   INITIAL_SCROLL_METRICS,
   type ListScrollMetrics,
@@ -405,9 +405,7 @@ function usePagerListState({
     [listRefs, listMounted, pendingScrollY, perPageScrollY]
   );
 
-  // Stop every list dead at its current offset. Kills background flings and
-  // in-flight animated scrolls so no page drifts away from where syncLists put
-  // it.
+  // Interrupt native momentum before synchronizing pages for a swipe.
   const freezeLists = useCallback(() => {
     'worklet';
     for (let i = 0; i < listRefs.length; i++) {
@@ -416,13 +414,19 @@ function usePagerListState({
       if (!ref || !y) continue;
       const target =
         scrollToTopIndex.value === i ? scrollToTopOffset.value : y.value;
-      if (scrollToMountedRef(ref, listMounted[i], 0, target, false)) {
+      const metrics = listScrollMetrics[i]?.value;
+      const maxOffset =
+        metrics && metrics.viewportHeight > 0
+          ? Math.max(0, metrics.contentHeight - metrics.viewportHeight)
+          : 0;
+      if (stopScrollAtOffset(ref, listMounted[i], target, maxOffset)) {
         y.value = target;
       }
     }
   }, [
     listRefs,
     listMounted,
+    listScrollMetrics,
     perPageScrollY,
     scrollToTopIndex,
     scrollToTopOffset,
@@ -678,7 +682,12 @@ function usePagerGestures({
             const ref = listRefs[i];
             const y = perPageScrollY[i];
             if (ref && y && y.value > 0) {
-              scrollToMountedRef(ref, listMounted[i], 0, y.value, false);
+              stopScrollAtOffset(
+                ref,
+                listMounted[i],
+                y.value,
+                headerScroll.maxOffset()
+              );
             }
           }
         },
