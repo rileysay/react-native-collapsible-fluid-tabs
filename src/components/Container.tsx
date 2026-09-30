@@ -41,6 +41,7 @@ import Animated, {
   withTiming,
   type AnimatedRef,
   type DerivedValue,
+  type ScrollHandlerProcessed,
   type SharedValue,
 } from 'react-native-reanimated';
 import { runOnUISync, scheduleOnRN } from 'react-native-worklets';
@@ -277,7 +278,7 @@ function usePagerListState({
     reduceMotionSV,
   });
 
-  const scrollHandlers: any[] = [];
+  const scrollHandlers: ScrollHandlerProcessed[] = [];
   for (let i = 0; i < tabCount; i++) {
     const pageScrollY = perPageScrollY[i]!;
     /* eslint-disable react-hooks/rules-of-hooks */
@@ -914,13 +915,17 @@ interface ContainerContentProps {
   onContainerLayout: (width: number, height: number) => void;
   onPinnedHeaderHeight: (height: number) => void;
   onHeaderHeight: (height: number) => void;
-  collapsibleHeaderStyle: any;
-  pullIndicatorStyle: any;
-  pagerGestures: any;
-  verticalGesture: any;
+  collapsibleHeaderStyle: ReturnType<
+    typeof useContainerAnimatedStyles
+  >['collapsibleHeaderStyle'];
+  pullIndicatorStyle: ReturnType<
+    typeof useContainerAnimatedStyles
+  >['pullIndicatorStyle'];
+  pagerGestures: ReturnType<typeof usePagerGestures>['pagerGestures'];
+  verticalGesture: ReturnType<typeof usePagerGestures>['pullPanGesture'];
   layoutWidth: number;
   tabCount: number;
-  pagerStyle: any;
+  pagerStyle: ReturnType<typeof useContainerAnimatedStyles>['pagerStyle'];
   nativePaging: SharedValue<boolean>;
   lazy: boolean;
   mountedTabIndices: Set<number>;

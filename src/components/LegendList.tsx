@@ -101,7 +101,8 @@ export function LegendList<T>(props: TabsLegendListProps<T>) {
 
   const ref = listRefs[index];
   const trackedRef = useTrackedScrollRef(ref, listMounted[index]);
-  const nativeGesture = listNativeGestures[index];
+  // Container creates one Native gesture for every registered tab index.
+  const nativeGesture = listNativeGestures[index]!;
   const refreshControl = useAutoRefreshControl(
     props.refreshControl,
     nativeGesture,

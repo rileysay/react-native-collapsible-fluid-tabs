@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
+import type { NativeGesture, PanGesture } from 'react-native-gesture-handler';
 import type {
   AnimatedRef,
   DerivedValue,
+  ScrollHandlerProcessed,
   SharedValue,
 } from 'react-native-reanimated';
 
@@ -253,15 +255,15 @@ export interface InternalTabsContextValue {
   perPageScrollY: SharedValue<number>[];
   scrollToTopIndex: SharedValue<number>;
   scrollToTopOffset: SharedValue<number>;
-  scrollHandlers: any[];
+  scrollHandlers: ScrollHandlerProcessed[];
   /** Per-tab Native gestures wrapping each scroll view. They `requireToFail`
    * the pager pan so the list stays frozen during a horizontal page swipe. */
-  listNativeGestures: any[];
+  listNativeGestures: NativeGesture[];
   /** Native refresh controls wait for the same horizontal direction decision. */
-  pagerPanGesture: any;
+  pagerPanGesture: PanGesture;
   /** Vertical chrome scrolling and Android stretched pull. Tab-bar taps wait
    * for it to fail so a drag cannot also select a tab on release. */
-  pullPanGesture: any;
+  pullPanGesture: PanGesture;
   pullDownBehavior: PullDownBehavior;
   usesCustomPullSV: SharedValue<boolean>;
   /**

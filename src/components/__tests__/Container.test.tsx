@@ -128,6 +128,20 @@ function currentGesture(): PanConfig {
   return config;
 }
 
+function emitListScroll(
+  index: number,
+  phase: 'onScroll' | 'onBeginDrag',
+  y: number
+) {
+  // This suite's Reanimated mock returns the original callbacks. Production
+  // receives an opaque processed handler, without these callback properties.
+  const callbacks = context.scrollHandlers[index] as unknown as
+    | Record<typeof phase, (event: { contentOffset: { y: number } }) => void>
+    | undefined;
+  if (!callbacks?.[phase]) throw new Error('Expected a mocked scroll callback');
+  callbacks[phase]({ contentOffset: { y } });
+}
+
 function swipe(direction: 'next' | 'previous' = 'next') {
   const gesture = currentGesture();
   const sign = direction === 'next' ? -1 : 1;
@@ -308,9 +322,7 @@ it('hands scroll-to-top back to a vertical drag at the actual native offset', ()
   jest.mocked(scrollTo).mockClear();
   jest.mocked(cancelAnimation).mockClear();
 
-  act(() =>
-    context.scrollHandlers[1].onBeginDrag({ contentOffset: { y: 115 } })
-  );
+  act(() => emitListScroll(1, 'onBeginDrag', 115));
   expect(context.scrollToTopIndex.value).toBe(-1);
   expect(cancelAnimation).toHaveBeenCalledWith(context.scrollToTopOffset);
   expect(cancelAnimation).toHaveBeenCalledWith(context.scrollY);
@@ -320,7 +332,7 @@ it('hands scroll-to-top back to a vertical drag at the actual native offset', ()
 
   act(() => completion(true));
   expect(context.scrollY.value).toBe(115);
-  act(() => context.scrollHandlers[1].onScroll({ contentOffset: { y: 130 } }));
+  act(() => emitListScroll(1, 'onScroll', 130));
   expect(context.scrollY.value).toBe(130);
 });
 
@@ -328,9 +340,7 @@ it('ignores an unrelated list drag while another list is scrolling to top', () =
   context.scrollToTopIndex.value = 1;
   context.scrollY.value = 150;
   jest.mocked(cancelAnimation).mockClear();
-  act(() =>
-    context.scrollHandlers[0].onBeginDrag({ contentOffset: { y: 40 } })
-  );
+  act(() => emitListScroll(0, 'onBeginDrag', 40));
   expect(context.scrollToTopIndex.value).toBe(1);
   expect(context.scrollY.value).toBe(150);
   expect(cancelAnimation).not.toHaveBeenCalled();
@@ -470,7 +480,7 @@ it.each([
 
     // A newly attached list can emit its initial offset before its content
     // is measured. That event must not expand the header during navigation.
-    act(() => context.scrollHandlers[3].onScroll({ contentOffset: { y: 0 } }));
+    act(() => emitListScroll(3, 'onScroll', 0));
     expect(context.scrollY.value).toBe(expectedOffset);
 
     const flushPendingOffsets = () => {
@@ -502,9 +512,7 @@ it.each([
     expect(context.scrollY.value).toBe(appliedOffset);
     expect(context.perPageScrollY[3]!.value).toBe(appliedOffset);
 
-    act(() =>
-      context.scrollHandlers[3].onScroll({ contentOffset: { y: 120 } })
-    );
+    act(() => emitListScroll(3, 'onScroll', 120));
     expect(context.scrollY.value).toBe(120);
   }
 );

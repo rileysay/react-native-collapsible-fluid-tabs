@@ -87,7 +87,8 @@ function TabsFlashListInner<T>(
   } = ctx;
 
   const flashRef = useRef<FlashListRef<T>>(null);
-  const nativeGesture = listNativeGestures[index];
+  // Container creates one Native gesture for every registered tab index.
+  const nativeGesture = listNativeGestures[index]!;
   // The Container's shared animated ref for this page. `syncLists` / `scrollTo`
   // drive it to align every page to the collapsed scroll offset on tab change.
   // The other list wrappers bind it to their scroller; we attach it to the real

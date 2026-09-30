@@ -69,7 +69,8 @@ export const ScrollView: React.ForwardRefExoticComponent<
     const ref = listRefs[index] as React.Ref<NativeScrollViewRef>;
     const trackedRef = useTrackedScrollRef(listRefs[index], listMounted[index]);
     const scrollHandler = scrollHandlers[index];
-    const nativeGesture = listNativeGestures[index];
+    // Container creates one Native gesture for every registered tab index.
+    const nativeGesture = listNativeGestures[index]!;
     const refreshControl = useAutoRefreshControl(
       props.refreshControl,
       nativeGesture

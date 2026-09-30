@@ -79,7 +79,8 @@ function TabsFlatListInner<T>(
 
   const ref = listRefs[index] as AnimatedRef<RNFlatList<T>>;
   const trackedRef = useTrackedScrollRef(ref, listMounted[index]);
-  const nativeGesture = listNativeGestures[index];
+  // Container creates one Native gesture for every registered tab index.
+  const nativeGesture = listNativeGestures[index]!;
   const refreshControl = useAutoRefreshControl(
     props.refreshControl,
     nativeGesture,

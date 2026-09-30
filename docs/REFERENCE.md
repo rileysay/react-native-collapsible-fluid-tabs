@@ -295,7 +295,7 @@ Returns `{ scrollY, headerHeight, collapseProgress (0→1), pinnedHeaderHeight, 
 
 Render an overlay like this as a sibling of the list inside a tab. `contentTop` is the fixed chrome height when the header is collapsed; it excludes the collapsing header. The hook provides values, not automatic sticky positioning or list spacing.
 
-`useTabsContext()` and `useTabIndex()` are also exported for lower-level use.
+`useTabsContext()` and `useTabIndex()` are also exported for lower-level use. The context's gesture and scroll-handler fields are typed as Gesture Handler `NativeGesture`/`PanGesture` objects and Reanimated processed scroll handlers; treat them as read-only.
 
 ---
 

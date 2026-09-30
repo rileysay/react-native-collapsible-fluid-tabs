@@ -53,8 +53,13 @@ let context: Pick<
   | 'pinnedHeaderHeight'
   | 'topInset'
   | 'tabBarHeight'
-  | 'pagerPanGesture'
->;
+> & {
+  // The mocked control only forwards this relation target; it does not run RNGH.
+  pagerPanGesture: Pick<
+    InternalTabsContextValue['pagerPanGesture'],
+    'handlerTag'
+  >;
+};
 let root: Root;
 let container: HTMLDivElement;
 let result: ReturnType<typeof useAutoRefreshControl>;
