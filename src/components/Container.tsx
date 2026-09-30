@@ -796,19 +796,22 @@ function usePagerGestures({
       ]
     )
   );
-  const panGestureWaitRef = useMemo(
-    () => ({ handlerTag: pagerPanGesture.handlerTag }),
+  // requireToFail resolves only the handlerTag. Preserve the real target across
+  // pager config changes, but follow tag changes (including Fast Refresh).
+  const pagerWaitTarget = useMemo(
+    () => pagerPanGesture,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [pagerPanGesture.handlerTag]
   );
   const nativeListConfig = useMemo(
     () => ({
-      requireToFail: panGestureWaitRef as unknown as typeof pagerPanGesture,
+      requireToFail: pagerWaitTarget,
       onTouchesDown: () => {
         'worklet';
         headerScroll.cancel();
       },
     }),
-    [panGestureWaitRef, headerScroll]
+    [pagerWaitTarget, headerScroll]
   );
 
   // A host Native gesture brings each scroll view into RNGH arbitration.
@@ -878,8 +881,8 @@ function usePagerGestures({
     // The real gesture object (relations like simultaneousWith need its
     // gestureRelations — a bare { handlerTag } ref crashes RNGH's relation
     // merging). Its identity changes per render, but relations resolve by
-    // handlerTag, which is stable for the component's lifetime, so holding
-    // an older instance (e.g. via the context memo) is fine.
+    // handlerTag. Context memoization must follow tag changes, including
+    // tags recreated by Fast Refresh.
     pullPanGesture: customPullPan,
   };
 }

@@ -5,6 +5,7 @@ import { act, createRef, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   GestureStateManager,
+  useNativeGesture,
   usePanGesture,
 } from 'react-native-gesture-handler';
 import Animated, {
@@ -22,6 +23,7 @@ import { Tab } from '../Tab';
 import { useTabsContext } from '../../context';
 
 const mockRNQueue: (() => void)[] = [];
+let mockHandlerTag = 1;
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
@@ -34,9 +36,12 @@ jest.mock('react-native-gesture-handler', () => ({
   GestureDetector: ({ children }: { children?: ReactNode }) => children,
   InterceptingGestureDetector: ({ children }: { children?: ReactNode }) =>
     children,
-  usePanGesture: jest.fn((config: object) => ({ ...config, handlerTag: 1 })),
+  usePanGesture: jest.fn((config: object) => ({
+    ...config,
+    handlerTag: mockHandlerTag,
+  })),
   GestureStateManager: { fail: jest.fn(), activate: jest.fn() },
-  useNativeGesture: () => ({ handlerTag: 2 }),
+  useNativeGesture: jest.fn((_config: object) => ({ handlerTag: 2 })),
   useCompetingGestures: (pager: object) => pager,
 }));
 jest.mock('react-native-reanimated', () => {
@@ -145,6 +150,7 @@ function deliverNextIndexChange() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockHandlerTag = 1;
   mockRNQueue.length = 0;
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -165,6 +171,25 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+});
+
+it('keeps list waits stable across pager config changes but follows a new handler tag', () => {
+  const nativeConfigs = () =>
+    jest.mocked(useNativeGesture).mock.calls.slice(-tabs.length);
+  const target = nativeConfigs()[0]![0]!.requireToFail;
+
+  renderPager({ swipeEnabled: false });
+  for (const [config] of nativeConfigs()) {
+    expect(config!.requireToFail).toBe(target);
+  }
+
+  // RNGH allocates tags in useMemo, which Fast Refresh can recompute while
+  // retaining useState. Model that changed tag without remounting Container.
+  mockHandlerTag = 42;
+  renderPager({ swipeEnabled: true });
+  for (const [config] of nativeConfigs()) {
+    expect(config!.requireToFail).toMatchObject({ handlerTag: 42 });
+  }
 });
 
 // Animation mocks record targets, not rendered frames. The RN notification
