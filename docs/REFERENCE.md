@@ -321,6 +321,14 @@ Android stretch mode replaces the native control with a built-in indicator. It r
 
 ---
 
+## Upgrading from 1.5
+
+- **Function components with `ref` as a prop.** `Tabs.Container`, `Tabs.ScrollView`, `Tabs.FlatList` and `Tabs.FlashList` are no longer `forwardRef` objects. JSX refs and `ComponentRef<typeof …>` resolve to the same types, but code that reads `.render`, `$$typeof` or `displayName` from them, or types them as `ForwardRefExoticComponent`, needs updating.
+- **`TabBarRenderProps.selectedIndex` is required.** Spreading the props `renderTabBar` receives keeps working; code that builds `TabBarRenderProps` or `DefaultTabBarProps` by hand must supply it.
+- **Typed context fields.** `useTabsContext()` now types `scrollHandlers`, `listNativeGestures`, `pagerPanGesture` and `pullPanGesture` instead of `any`.
+- **`Tabs.FlatList` rejects `CellRendererComponent`** at compile time. Reanimated's `Animated.FlatList` always replaced it, so it never took effect.
+- **iOS refresh shorthand** creates React Native's `RefreshControl` instead of Gesture Handler's (experimental).
+
 ## Web
 
 Supported on `react-native-web`. Web scroll handlers run in the browser. The default tab bar supports pointer and keyboard activation. Inactive pages stay mounted but are hidden from accessibility; web pages also use `inert` to exclude their controls from keyboard focus. Verify touch scrolling, horizontal swiping, and focus behavior in the browsers you support. Native frame pacing requires separate device profiling.
