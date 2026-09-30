@@ -25,6 +25,12 @@ static void CollectOuterScrollViews(UIView *view, NSMutableSet<UIScrollView *> *
 // tab or header button only stops the list. Stop it before any recognizer sees
 // the touch: the tap then reaches the control, and a drag still begins from the
 // stopped position. Touches on the list itself keep UIKit's catch behavior.
+//
+// Unresolved completion requirement: it is unverified whether UIKit, and so
+// React Native, delivers scrollViewDidEndDecelerating / onMomentumScrollEnd
+// after this stop. Without it, React Native's ScrollView keeps _isAnimating()
+// true and captures the next touch on a list row. Measure on a device before
+// treating this as fixed; do not synthesize an end event without evidence.
 static void StopCoastingForExternalTouch(UIScrollView *scrollView)
 {
   if (!scrollView.isDecelerating || scrollView.isDragging) return;
@@ -34,12 +40,13 @@ static void StopCoastingForExternalTouch(UIScrollView *scrollView)
   CGFloat maxY = MAX(minY, scrollView.contentSize.height - scrollView.bounds.size.height + inset.bottom);
   // Never freeze a bounce: stopping past an edge would leave the list overscrolled.
   if (offset.y < minY || offset.y > maxY) return;
-  [scrollView setContentOffset:offset animated:NO];
-  // Report the end of momentum as a natural stop would, so React Native and the
-  // tabs container do not keep treating the list as moving.
-  id<UIScrollViewDelegate> delegate = scrollView.delegate;
-  if ([delegate respondsToSelector:@selector(scrollViewDidEndDecelerating:)]) {
-    [delegate scrollViewDidEndDecelerating:scrollView];
+  if (@available(iOS 17.4, *)) {
+    [scrollView stopScrollingAndZooming];
+  } else {
+    // iOS 16.4-17.3: re-setting the current offset without animation is a
+    // common but undocumented way to stop deceleration. Needs a device test on
+    // an OS below 17.4.
+    [scrollView setContentOffset:offset animated:NO];
   }
 }
 
@@ -65,6 +72,9 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   BOOL _backgrounded;
   BOOL _reconcileScheduled;
   BOOL _reconciling;
+  // Touches already considered for a coasting stop. Hit-testing can run more
+  // than once per touch, including A, B, then A again with two fingers.
+  NSHashTable<UITouch *> *_stopCheckedTouches;
 }
 
 - (instancetype)initWithHost:(UIView *)host
@@ -72,6 +82,7 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   if ((self = [super init])) {
     _host = host;
     _pages = [NSMutableDictionary new];
+    _stopCheckedTouches = [NSHashTable weakObjectsHashTable];
     _requestedIndex = 0;
     _committedIndex = NSNotFound;
     _pointers = [[FTNSPointerObserver alloc] initWithTarget:nil action:NULL];
@@ -269,13 +280,29 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   // Hit-testing precedes recognizer delivery, including a native pan that
   // catches deceleration on touch-down. Record the actual hit origin early.
   if (!_owner || event.type != UIEventTypeTouches) return;
-  if (![view isDescendantOfView:_owner]) StopCoastingForExternalTouch(_owner);
+  BOOL hasBeganTouch = NO;
   for (UITouch *touch in event.allTouches) {
     if (touch.phase == UITouchPhaseBegan) {
-      RNGHExternalScrollRecordHitView(_owner.panGestureRecognizer, view);
+      hasBeganTouch = YES;
       break;
     }
   }
+  if (!hasBeganTouch) return;
+  RNGHExternalScrollRecordHitView(_owner.panGestureRecognizer, view);
+  // Only a beginning touch outside the list, and only once per touch. A hit
+  // inside the list must not consume the stop check: with two new fingers, the
+  // list finger can be hit-tested before the header finger. If the new touch
+  // is not yet in allTouches during hit-testing, this is a no-op (device
+  // check), never a stop for an unrelated event.
+  if ([view isDescendantOfView:_owner]) return;
+  BOOL hasUncheckedBeganTouch = NO;
+  for (UITouch *touch in event.allTouches) {
+    if (touch.phase == UITouchPhaseBegan && ![_stopCheckedTouches containsObject:touch]) {
+      [_stopCheckedTouches addObject:touch];
+      hasUncheckedBeganTouch = YES;
+    }
+  }
+  if (hasUncheckedBeganTouch) StopCoastingForExternalTouch(_owner);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch
