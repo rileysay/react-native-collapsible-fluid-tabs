@@ -124,6 +124,42 @@ export function SingleHeaderPage({ children }: { children: ReactNode }) {
 }
 
 type RenderScrollComponent<P> = ((props: P) => ReactElement | null) | undefined;
+type ScrollRef = React.ComponentRef<typeof ScrollView>;
+type ScrollRenderer = (props: object) => ReactElement | null;
+
+const renderDefaultScroll: ScrollRenderer = (props) => (
+  <ScrollView {...(props as ScrollViewProps)} />
+);
+
+type SingleHeaderScrollProps = {
+  ref?: Ref<ScrollRef>;
+  fluidTabsRenderScroll: ScrollRenderer;
+  fluidTabsNativeGesture: NativeGesture;
+};
+
+// Module scope keeps the element type stable when a list's renderer changes
+// identity, so the scroll view updates in place instead of remounting.
+function SingleHeaderScroll({
+  ref,
+  fluidTabsRenderScroll,
+  fluidTabsNativeGesture,
+  ...props
+}: SingleHeaderScrollProps) {
+  const element = fluidTabsRenderScroll({ ...props, ref });
+  if (!element) return null;
+  const scrollView = ref
+    ? React.cloneElement(element as ReactElement<{ ref?: Ref<ScrollRef> }>, {
+        ref,
+      })
+    : element;
+  return (
+    <SingleHeaderPage>
+      <GestureDetector gesture={fluidTabsNativeGesture}>
+        {scrollView}
+      </GestureDetector>
+    </SingleHeaderPage>
+  );
+}
 
 /**
  * Wraps a virtualized list's scroll renderer in its page registration and
@@ -136,36 +172,16 @@ export function useSingleHeaderScrollComponent<P extends object>(
   const enabled = isNativeHeaderScrollEnabled();
   return useMemo(() => {
     if (!enabled) return render;
-    type ScrollRef = React.ComponentRef<typeof ScrollView>;
     const renderScroll =
-      render ?? ((props: P) => <ScrollView {...(props as ScrollViewProps)} />);
+      (render as ScrollRenderer | undefined) ?? renderDefaultScroll;
     // VirtualizedList clones the returned element with its ref and item cells.
     // Keep that replaceable boundary outside the registration and detector so
     // the clone cannot replace the actual scroll view with bare list children.
-    const ScrollComponent = forwardRef<ScrollRef, P>(
-      function SingleHeaderScroll(props, ref) {
-        const element = renderScroll({ ...props, ref } as P);
-        if (!element) return null;
-        const scrollView = ref
-          ? React.cloneElement(
-              element as ReactElement<{ ref?: Ref<ScrollRef> }>,
-              { ref }
-            )
-          : element;
-        return (
-          <SingleHeaderPage>
-            <GestureDetector gesture={nativeGesture}>
-              {scrollView}
-            </GestureDetector>
-          </SingleHeaderPage>
-        );
-      }
-    );
     return (props: P) => (
-      <ScrollComponent
-        {...(props as React.PropsWithoutRef<P> &
-          React.RefAttributes<ScrollRef> &
-          React.Attributes)}
+      <SingleHeaderScroll
+        {...props}
+        fluidTabsRenderScroll={renderScroll}
+        fluidTabsNativeGesture={nativeGesture}
       />
     );
   }, [enabled, render, nativeGesture]);

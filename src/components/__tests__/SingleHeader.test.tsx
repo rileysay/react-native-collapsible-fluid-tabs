@@ -1,7 +1,14 @@
 /** @jest-environment jsdom */
 /// <reference lib="dom" />
 
-import { act, type ReactElement, type ReactNode } from 'react';
+import {
+  act,
+  cloneElement,
+  useEffect,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Platform } from 'react-native';
 import type { NativeGesture } from 'react-native-gesture-handler';
@@ -162,6 +169,66 @@ describe('useSingleHeaderScrollComponent', () => {
     renderTree(renderScroll?.({ children: <span>row</span> }), 0);
 
     expect(pageProps.at(-1)).toMatchObject({ pageIndex: 0 });
+    expect(container.textContent).toBe('row');
+  });
+
+  it('keeps the scroll view mounted when the list renderer changes identity', () => {
+    registerNativeHeaderScroll({ Host, Page });
+    let mounts = 0;
+    function Scroller(props: { label: string; children?: ReactNode }) {
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return (
+        <>
+          {props.label}
+          {props.children}
+        </>
+      );
+    }
+    // A new renderer every render, as with an inline renderScrollComponent.
+    function List({ label }: { label: string }) {
+      const renderScroll = useSingleHeaderScrollComponent<{
+        children?: ReactNode;
+      }>((props) => <Scroller label={label} {...props} />, gesture);
+      return renderScroll?.({ children: <span>row</span> }) ?? null;
+    }
+
+    renderTree(<List label="a" />, 0);
+    renderTree(<List label="b" />, 0);
+
+    expect(container.textContent).toBe('brow');
+    expect(mounts).toBe(1);
+  });
+
+  it('passes the list ref to the rendered scroll view', () => {
+    registerNativeHeaderScroll({ Host, Page });
+    const listRef = jest.fn();
+    const received: unknown[] = [];
+    function Scroller(props: { ref?: Ref<unknown>; children?: ReactNode }) {
+      received.push(props.ref);
+      return <>{props.children}</>;
+    }
+    let renderScroll:
+      | ((props: { children?: ReactNode }) => ReactElement | null)
+      | undefined;
+    function Probe() {
+      renderScroll = useSingleHeaderScrollComponent<{ children?: ReactNode }>(
+        (props) => <Scroller {...props} />,
+        gesture
+      );
+      return null;
+    }
+    act(() => root.render(<Probe />));
+
+    // VirtualizedList clones the renderer's element with its own scroll ref.
+    const element = renderScroll?.({ children: <span>row</span> }) as
+      | ReactElement<{ ref?: Ref<unknown> }>
+      | null
+      | undefined;
+    renderTree(element ? cloneElement(element, { ref: listRef }) : null, 0);
+
+    expect(received.at(-1)).toBe(listRef);
     expect(container.textContent).toBe('row');
   });
 });
