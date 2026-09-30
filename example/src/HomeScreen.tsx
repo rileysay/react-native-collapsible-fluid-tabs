@@ -189,6 +189,21 @@ export function HomeScreen() {
           </View>
         </Pressable>
       </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open the published 1.5.1 pointer events demo"
+        onPress={() => router.push('/native-scroll-pass-through')}
+        style={({ pressed }) => [s.card, s.instagramCard, pressed && s.pressed]}
+      >
+        <View style={s.cardCopy}>
+          <Text style={s.number}>04B / BEFORE + POINTER EVENTS</Text>
+          <Text style={s.cardTitle}>1.5.1 pass-through</Text>
+          <Text style={s.cardDescription}>
+            Empty header areas pass touches{'\n'}to the list. Buttons do not.
+          </Text>
+        </View>
+      </Pressable>
     </ScrollView>
   );
 }

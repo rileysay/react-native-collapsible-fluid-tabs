@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RefreshControl } from 'react-native-gesture-handler';
 import {
   Tabs as BetaTabs,
@@ -17,11 +17,12 @@ import {
   type Post,
 } from './demo';
 
-export type CompareVersion = 'published' | 'beta';
+export type CompareVersion = 'published' | 'passThrough' | 'beta';
 
 // The same screen runs on the published npm package and on this branch.
 const TABS: Record<CompareVersion, typeof BetaTabs> = {
   published: PublishedTabs as unknown as typeof BetaTabs,
+  passThrough: PublishedTabs as unknown as typeof BetaTabs,
   beta: BetaTabs,
 };
 
@@ -29,6 +30,10 @@ const COPY: Record<CompareVersion, { badge: string; note: string }> = {
   published: {
     badge: '1.5.1',
     note: 'Published 1.5.1. Drags that start on the header or tab bar are scrolled from JavaScript, so they stop dead at the top and bottom.',
+  },
+  passThrough: {
+    badge: '1.5.1 + PE',
+    note: 'Published 1.5.1 with headerScrollEnabled off and pointerEvents on the header. Drags on empty header areas fall through to the list. Drags on buttons and the tab bar do not scroll.',
   },
   beta: {
     badge: 'NATIVE',
@@ -38,13 +43,32 @@ const COPY: Record<CompareVersion, { badge: string; note: string }> = {
 
 const noop = () => {};
 
+// Development diagnostics for the native header scroll device checks: momentum
+// begin/end per list, row presses and tab changes, logged to Metro.
+function diag(...args: unknown[]) {
+  if (__DEV__) console.log('[header-scroll]', ...args);
+}
+
+// Pass-through demo: only buttons take a touch. Everything else lets it fall
+// to the list underneath, which then scrolls natively.
+function pointerEventsFor(version: CompareVersion) {
+  const passThrough = version === 'passThrough';
+  return {
+    container: passThrough ? ('box-none' as const) : ('auto' as const),
+    decoration: passThrough ? ('none' as const) : ('auto' as const),
+  };
+}
+
 function CompareHeader({ version }: { version: CompareVersion }) {
+  const pe = pointerEventsFor(version);
   return (
-    <View style={s.header}>
-      <Avatar size={96} />
-      <Text style={s.name}>Rowan Miles</Text>
-      <Text style={s.handle}>@rowanmiles</Text>
-      <View style={s.stats}>
+    <View style={s.header} pointerEvents={pe.container}>
+      <View style={s.identity} pointerEvents={pe.decoration}>
+        <Avatar size={96} />
+        <Text style={s.name}>Rowan Miles</Text>
+        <Text style={s.handle}>@rowanmiles</Text>
+      </View>
+      <View style={s.stats} pointerEvents={pe.container}>
         {[
           ['60', 'Looks'],
           ['36', 'Posts'],
@@ -64,35 +88,46 @@ function CompareHeader({ version }: { version: CompareVersion }) {
       <Button label="Edit profile" onPress={noop} dark style={s.action}>
         Edit profile
       </Button>
-      <Text style={s.note}>{COPY[version].note}</Text>
+      <View style={s.noteWrap} pointerEvents={pe.decoration}>
+        <Text style={s.note}>{COPY[version].note}</Text>
+      </View>
     </View>
   );
 }
 
 function LookTile({ item }: { item: Photo }) {
   return (
-    <View style={s.lookTile}>
+    <Pressable
+      style={s.lookTile}
+      onPress={() => diag('row tap', 'looks', item.id)}
+    >
       <Image source={item.source} style={s.fill} />
-    </View>
+    </Pressable>
   );
 }
 
 function PostRow({ item }: { item: Post }) {
   return (
-    <View style={s.postRow}>
+    <Pressable
+      style={s.postRow}
+      onPress={() => diag('row tap', 'posts', item.id)}
+    >
       <Text style={s.postText}>{item.text}</Text>
       <Text style={s.postMeta}>
         {item.time} · {item.likes} likes
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
 function SavedTile({ item }: { item: Photo }) {
   return (
-    <View style={s.savedTile}>
+    <Pressable
+      style={s.savedTile}
+      onPress={() => diag('row tap', 'saved', item.id)}
+    >
       <Image source={item.source} style={s.fill} />
-    </View>
+    </Pressable>
   );
 }
 
@@ -123,21 +158,37 @@ export function NativeScrollCompareScreen({
     [version]
   );
   const renderPinnedHeader = useCallback(
-    ({ topInset }: HeaderRenderProps) => (
-      <View style={[s.pinned, { paddingTop: topInset }]}>
-        <View style={s.pinnedRow}>
-          <BackButton onPress={onBack} />
-          <Text style={s.pinnedTitle}>Profile</Text>
-          <View style={[s.badge, version === 'beta' && s.betaBadge]}>
-            <Text style={[s.badgeText, version === 'beta' && s.betaText]}>
-              {COPY[version].badge}
-            </Text>
+    ({ topInset }: HeaderRenderProps) => {
+      const pe = pointerEventsFor(version);
+      return (
+        <View
+          style={[s.pinned, { paddingTop: topInset }]}
+          pointerEvents={pe.container}
+        >
+          <View style={s.pinnedRow} pointerEvents={pe.container}>
+            <BackButton onPress={onBack} />
+            <View style={s.pinnedTitleWrap} pointerEvents={pe.decoration}>
+              <Text style={s.pinnedTitle}>Profile</Text>
+            </View>
+            <View
+              style={[s.badge, version === 'beta' && s.betaBadge]}
+              pointerEvents={pe.decoration}
+            >
+              <Text style={[s.badgeText, version === 'beta' && s.betaText]}>
+                {COPY[version].badge}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-    ),
+      );
+    },
     [onBack, version]
   );
+
+  const momentum = (tab: string) => ({
+    onMomentumScrollBegin: () => diag(version, tab, 'momentum begin'),
+    onMomentumScrollEnd: () => diag(version, tab, 'momentum end'),
+  });
 
   return (
     <View style={s.screen}>
@@ -147,6 +198,10 @@ export function NativeScrollCompareScreen({
         pinnedHeaderHeight={56}
         estimatedHeaderHeight={360}
         pullDownBehavior="stretch"
+        // The pass-through demo lets touches reach the list instead of the
+        // library's JavaScript header drag, which claims header touches by position.
+        headerScrollEnabled={version !== 'passThrough'}
+        onIndexChange={(index) => diag(version, 'tab', index)}
         containerStyle={s.screen}
       >
         <Tabs.Tab name="looks" label="Looks">
@@ -158,6 +213,7 @@ export function NativeScrollCompareScreen({
             recycleItems
             getItemType={photoItemType}
             refreshControl={<RefreshControl {...looks} />}
+            {...momentum('looks')}
           />
         </Tabs.Tab>
         <Tabs.Tab name="posts" label="Posts">
@@ -166,6 +222,7 @@ export function NativeScrollCompareScreen({
             keyExtractor={keyById}
             renderItem={renderPost}
             refreshControl={<RefreshControl {...posts} />}
+            {...momentum('posts')}
           />
         </Tabs.Tab>
         <Tabs.Tab name="saved" label="Saved">
@@ -175,10 +232,14 @@ export function NativeScrollCompareScreen({
             renderItem={renderSaved}
             numColumns={3}
             refreshControl={<RefreshControl {...saved} />}
+            {...momentum('saved')}
           />
         </Tabs.Tab>
         <Tabs.Tab name="about" label="About">
-          <Tabs.ScrollView refreshControl={<RefreshControl {...about} />}>
+          <Tabs.ScrollView
+            refreshControl={<RefreshControl {...about} />}
+            {...momentum('about')}
+          >
             <View style={s.about}>
               <Text style={s.aboutTitle}>What to try</Text>
               {[
@@ -211,7 +272,8 @@ const s = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 12,
   },
-  pinnedTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: colors.ink },
+  pinnedTitleWrap: { flex: 1 },
+  pinnedTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -233,6 +295,8 @@ const s = StyleSheet.create({
     paddingBottom: 20,
     backgroundColor: colors.paper,
   },
+  identity: { alignItems: 'center' },
+  noteWrap: { alignSelf: 'stretch' },
   name: {
     marginTop: 12,
     fontSize: 26,
