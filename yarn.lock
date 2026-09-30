@@ -10664,7 +10664,7 @@ __metadata:
     react-native: "npm:0.86.3"
     react-native-builder-bob: "npm:^0.41.0"
     react-native-collapsible-fluid-tabs-published: "https://registry.npmjs.org/react-native-collapsible-fluid-tabs/-/react-native-collapsible-fluid-tabs-1.5.1.tgz"
-    react-native-gesture-handler: "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch"
+    react-native-gesture-handler: "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-ios-external-scroll-owner.patch"
     react-native-monorepo-config: "npm:^0.3.3"
     react-native-reanimated: "npm:4.6.0"
     react-native-safe-area-context: "npm:~5.7.0"
@@ -10731,7 +10731,7 @@ __metadata:
     react-dom: "npm:19.2.3"
     react-native: "npm:0.86.3"
     react-native-builder-bob: "npm:^0.41.0"
-    react-native-gesture-handler: "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch"
+    react-native-gesture-handler: "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-ios-external-scroll-owner.patch"
     react-native-reanimated: "npm:4.6.0"
     react-native-safe-area-context: "npm:~5.7.0"
     react-native-worklets: "npm:0.12.1"
@@ -10782,16 +10782,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-gesture-handler@patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch":
+"react-native-gesture-handler@patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-ios-external-scroll-owner.patch":
   version: 3.2.1
-  resolution: "react-native-gesture-handler@patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch::version=3.2.1&hash=b2bfc6"
+  resolution: "react-native-gesture-handler@patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-ios-external-scroll-owner.patch::version=3.2.1&hash=93ae25"
   dependencies:
     "@types/react-test-renderer": "npm:^19.1.0"
     invariant: "npm:^2.2.4"
   peerDependencies:
     react: "*"
     react-native: "*"
-  checksum: 10c0/f1326fea938526e2e0c30ffde818d9c5a5d5710cb60028f58d17627f88547b38649429c2042440575986cb32b6c604b31f8d6bd00f0744508107b22f9b103113
+  checksum: 10c0/0c3a1e17aa8ef16854f6fbe5cbfbbe4cf043b041ce380974dfcb59bce2beb769e6949f46ff520e3fb19b52606c6bac5ed857d9374d5029948c01283beee577e6
   languageName: node
   linkType: hard
 

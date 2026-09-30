@@ -34,7 +34,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-collapsible-fluid-tabs-published": "https://registry.npmjs.org/react-native-collapsible-fluid-tabs/-/react-native-collapsible-fluid-tabs-1.5.1.tgz",
-    "react-native-gesture-handler": "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-73a74f5c79.patch",
+    "react-native-gesture-handler": "patch:react-native-gesture-handler@npm%3A3.2.1#~/.yarn/patches/react-native-gesture-handler-npm-3.2.1-ios-external-scroll-owner.patch",
     "react-native-reanimated": "4.6.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
