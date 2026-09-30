@@ -1,9 +1,4 @@
-import React, {
-  forwardRef,
-  useLayoutEffect,
-  useImperativeHandle,
-  useMemo,
-} from 'react';
+import React, { useLayoutEffect, useImperativeHandle, useMemo } from 'react';
 import {
   Platform,
   View,
@@ -42,11 +37,11 @@ export type TabsFlatListProps<T> = Omit<
   minContentHeight?: number;
 };
 
-function TabsFlatListInner<T>(
-  props: TabsFlatListProps<T>,
-  forwardedRef: React.Ref<RNFlatList<T>>
-) {
+export function FlatList<T>(
+  props: TabsFlatListProps<T> & { ref?: React.Ref<RNFlatList<T>> }
+): React.ReactElement {
   const {
+    ref: forwardedRef,
     onRefresh,
     refreshing,
     progressViewOffset,
@@ -177,7 +172,3 @@ function TabsFlatListInner<T>(
 
   return <ListDetector gesture={nativeGesture}>{list}</ListDetector>;
 }
-
-export const FlatList = forwardRef(TabsFlatListInner) as <T>(
-  props: TabsFlatListProps<T> & { ref?: React.Ref<RNFlatList<T>> }
-) => React.ReactElement;

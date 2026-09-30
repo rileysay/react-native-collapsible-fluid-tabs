@@ -1,6 +1,5 @@
 import React, {
   createContext,
-  forwardRef,
   useContext,
   useMemo,
   type ComponentType,
@@ -102,13 +101,16 @@ function NativeHost({ activeIndex, paging, ...props }: SingleHeaderHostProps) {
 }
 
 /** The container root: a plain View unless native header scroll is registered. */
-export const SingleHeaderHost = forwardRef<HostRef, SingleHeaderHostProps>(
-  function SingleHeaderHost({ activeIndex, paging, ...props }, ref) {
-    if (!isNativeHeaderScrollEnabled()) return <View {...props} ref={ref} />;
-    // The container's root ref is only read by its web scroll listener.
-    return <NativeHost {...props} activeIndex={activeIndex} paging={paging} />;
-  }
-);
+export function SingleHeaderHost({
+  ref,
+  activeIndex,
+  paging,
+  ...props
+}: SingleHeaderHostProps & { ref?: Ref<HostRef> }) {
+  if (!isNativeHeaderScrollEnabled()) return <View {...props} ref={ref} />;
+  // The container's root ref is only read by its web scroll listener.
+  return <NativeHost {...props} activeIndex={activeIndex} paging={paging} />;
+}
 
 /** Registers one list's native scroll view with the host. */
 export function SingleHeaderPage({ children }: { children: ReactNode }) {

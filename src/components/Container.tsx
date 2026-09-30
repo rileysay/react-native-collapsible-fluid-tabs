@@ -1,5 +1,4 @@
 import {
-  forwardRef,
   memo,
   useCallback,
   useEffect,
@@ -143,27 +142,28 @@ function createMountedTabs(
 }
 
 /** Coordinates named tab pages, a collapsing header, and an optional pinned header. */
-export const Container = forwardRef<TabsRef, ContainerProps>(
-  function Container(props, ref) {
-    const tabs = useMemo(() => extractTabs(props.children), [props.children]);
-    // Per-tab state below is built with hook loops keyed on tab count. Remount
-    // the implementation whenever tab identity or order changes so React never
-    // sees a different number of hooks, and offsets/refs cannot migrate to a
-    // different tab after reordering or replacing tabs at the same count.
-    return (
-      <ContainerImpl
-        key={JSON.stringify(tabs.map((tab) => tab.key))}
-        {...props}
-        tabs={tabs}
-        containerRef={ref}
-      />
-    );
-  }
-);
+export function Container({
+  ref,
+  ...props
+}: ContainerProps & { ref?: Ref<TabsRef> }) {
+  const tabs = useMemo(() => extractTabs(props.children), [props.children]);
+  // Per-tab state below is built with hook loops keyed on tab count. Remount
+  // the implementation whenever tab identity or order changes so React never
+  // sees a different number of hooks, and offsets/refs cannot migrate to a
+  // different tab after reordering or replacing tabs at the same count.
+  return (
+    <ContainerImpl
+      key={JSON.stringify(tabs.map((tab) => tab.key))}
+      {...props}
+      tabs={tabs}
+      containerRef={ref}
+    />
+  );
+}
 
 interface ContainerImplProps extends ContainerProps {
   tabs: ExtractedTab[];
-  containerRef: Ref<TabsRef>;
+  containerRef: Ref<TabsRef> | undefined;
 }
 
 function useMountedTabs({
@@ -1178,7 +1178,7 @@ function useTabNavigation({
 }: {
   controlledIndex: number | undefined;
   lastNotifiedIndex: RefObject<number | undefined>;
-  containerRef: Ref<TabsRef>;
+  containerRef: Ref<TabsRef> | undefined;
   tabCount: number;
   activeIndex: SharedValue<number>;
   pageWidth: SharedValue<number>;

@@ -1,4 +1,4 @@
-﻿import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+﻿import React, { useImperativeHandle, useMemo, useRef } from 'react';
 import { Platform, ScrollView as RNScrollView, View } from 'react-native';
 import type { FlashListProps, FlashListRef } from '@shopify/flash-list';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -43,11 +43,11 @@ export type TabsFlashListProps<T> = Omit<
   minContentHeight?: number;
 };
 
-function TabsFlashListInner<T>(
-  props: TabsFlashListProps<T>,
-  forwardedRef: React.Ref<FlashListRef<T>>
-) {
+export function FlashList<T>(
+  props: TabsFlashListProps<T> & { ref?: React.Ref<FlashListRef<T>> }
+): React.ReactElement {
   const {
+    ref: forwardedRef,
     onRefresh,
     refreshing,
     progressViewOffset,
@@ -217,7 +217,3 @@ function TabsFlashListInner<T>(
     />
   );
 }
-
-export const FlashList = forwardRef(TabsFlashListInner) as <T>(
-  props: TabsFlashListProps<T> & { ref?: React.Ref<FlashListRef<T>> }
-) => React.ReactElement;
