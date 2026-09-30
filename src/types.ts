@@ -42,6 +42,13 @@ export interface TabBarRenderProps {
   headerHeight: SharedValue<number>;
   /** Selected target index; changes before a paging animation finishes. */
   activeIndex: SharedValue<number>;
+  /**
+   * Selected page in React state, for accessibility and non-animated UI.
+   * Updates when the index change reaches React. Use activeIndex or pagerOffset
+   * for motion on the UI thread. Always supplied by Container; include it when
+   * constructing tab-bar props manually.
+   */
+  selectedIndex: number;
   /** Fractional visual page position, clamped to the first and last pages. */
   pagerOffset: DerivedValue<number>;
   /** Width of one equal-width tab slot, measured by the default tab bar. */

@@ -264,7 +264,9 @@ It's **adaptive**: equal-width pills when tabs fit, and a horizontally scrollabl
 
 ### Custom tab bar
 
-`renderTabBar` receives **`TabBarRenderProps`** (exported from the package): tab configs, `activeIndex`, `pagerOffset`, `headerHeight`, `perPageScrollY`, `onTabPress`, and the rest. Use it with `useAnimatedStyle` for a bar that tracks live swipe progress.
+`renderTabBar` receives **`TabBarRenderProps`** (exported from the package): tab configs, `activeIndex`, `selectedIndex`, `pagerOffset`, `headerHeight`, `perPageScrollY`, `onTabPress`, and the rest. Use it with `useAnimatedStyle` for a bar that tracks live swipe progress.
+
+`selectedIndex` is the Container's selected page as React state, so there's no need to track it yourself. Use it for accessibility (`accessibilityState={{ selected }}`) and other non-animated UI. It updates once the index change reaches React; drive motion from `activeIndex` or `pagerOffset` on the UI thread instead. It's always supplied, so spreading the received props (as above) keeps working. Code that builds `TabBarRenderProps` or `DefaultTabBarProps` by hand must now include it.
 
 For collapse motion in a worklet, start with `perPageScrollY[activeIndex.value]?.value`. During a same-tab scroll-to-top, use `scrollToTopOffset.value` when `scrollToTopIndex.value` matches the active index. Android's custom stretch pull is represented by a negative `scrollY.value`, while the native list remains at zero. See `Tabs.DefaultTabBar` for the full offset selection and positioning logic.
 

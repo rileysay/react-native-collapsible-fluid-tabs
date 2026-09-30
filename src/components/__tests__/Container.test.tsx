@@ -195,6 +195,16 @@ it('keeps list waits stable across pager config changes but follows a new handle
 // Animation mocks record targets, not rendered frames. The RN notification
 // queue and parent prop commits are separate so UI gestures can get ahead of
 // React, as they do during repeated swipes on a busy device.
+it.each([
+  { initialIndex: 2, index: undefined, expected: 2 },
+  { initialIndex: 1, index: 3, expected: 3 },
+])('supplies the starting selection to tab bars (%j)', (initial) => {
+  act(() => root.unmount());
+  root = createRoot(host);
+  renderPager({ initialIndex: initial.initialIndex, index: initial.index });
+  expect(tabBar.selectedIndex).toBe(initial.expected);
+});
+
 it('keeps heading to tab 4 when React acknowledges the earlier tab-3 swipe', () => {
   swipe();
   deliverNextIndexChange();
@@ -220,9 +230,11 @@ it('does not publish a queued tab-3 notification after the next swipe reaches ta
   swipe();
   deliverNextIndexChange();
   expect(onIndexChange).not.toHaveBeenCalled();
+  expect(tabBar.selectedIndex).toBe(1);
   deliverNextIndexChange();
   expect(onIndexChange).toHaveBeenCalledTimes(1);
   expect(onIndexChange).toHaveBeenLastCalledWith(3);
+  expect(tabBar.selectedIndex).toBe(3);
   renderPager({ index: 3 });
   expect(pagerRef.current!.getIndex()).toBe(3);
   expect(withTiming).not.toHaveBeenCalled();
@@ -241,6 +253,7 @@ it('preserves external controlled navigation after a swipe is acknowledged', () 
   renderPager({ index: 2 });
   renderPager({ index: 0 });
   expect(pagerRef.current!.getIndex()).toBe(0);
+  expect(tabBar.selectedIndex).toBe(0);
   expect(withTiming).toHaveBeenLastCalledWith(
     -0,
     expect.any(Object),
@@ -252,9 +265,15 @@ it('preserves external controlled navigation after a swipe is acknowledged', () 
 it('does not restart a tab-tap animation when the parent acknowledges it', () => {
   act(() => tabBar.onTabPress(3));
   expect(pagerRef.current!.getIndex()).toBe(3);
+  expect(tabBar.selectedIndex).toBe(3);
   expect(withTiming).toHaveBeenCalledTimes(1);
   renderPager({ index: 3, onIndexChange: jest.fn() });
   expect(withTiming).toHaveBeenCalledTimes(1);
+});
+
+it('updates tab-bar selection through imperative navigation', () => {
+  act(() => pagerRef.current!.setIndex(2, false));
+  expect(tabBar.selectedIndex).toBe(2);
 });
 
 it.each([false, true])(

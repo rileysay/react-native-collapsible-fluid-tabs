@@ -243,7 +243,7 @@ export function ProfileTabBar({
   selectedIndex,
   variant,
   ...props
-}: TabBarRenderProps & { selectedIndex: number; variant: 'x' | 'instagram' }) {
+}: TabBarRenderProps & { variant: 'x' | 'instagram' }) {
   const { headerHeight, collapseProgress, scrollY } = useCollapsibleHeader();
   const {
     pinnedHeaderHeight,

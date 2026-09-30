@@ -973,6 +973,7 @@ function ContainerContentBase({
     tabCount,
     headerHeight,
     activeIndex,
+    selectedIndex,
     pagerOffset,
     pillWidth,
     pinnedHeaderHeight: resolvedPinnedHeaderHeight,

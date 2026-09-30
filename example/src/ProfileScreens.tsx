@@ -405,9 +405,9 @@ export function ProfileScreen({
   );
   const renderTabBar = useCallback(
     (props: TabBarRenderProps) => (
-      <ProfileTabBar {...props} variant={variant} selectedIndex={index} />
+      <ProfileTabBar {...props} variant={variant} />
     ),
-    [index, variant]
+    [variant]
   );
   const renderPhoto = useCallback(
     ({ item }: { item: Photo }) => <PhotoTile item={item} onOpen={setPhoto} />,

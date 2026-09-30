@@ -111,6 +111,7 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     tabCount,
     headerHeight,
     activeIndex,
+    selectedIndex,
     pagerOffset,
     pillWidth,
     tabBarHeight,
@@ -149,20 +150,6 @@ export function DefaultTabBar(props: DefaultTabBarProps) {
     scrollable === 'auto'
       ? containerWidth / tabs.length < minTabWidth
       : scrollable;
-
-  // Mirror the active page into JS state so each tab can report its
-  // accessibilityState. Only fires on whole-page changes, not per frame.
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  useAnimatedReaction(
-    () => {
-      'worklet';
-      return Math.round(activeIndex.value);
-    },
-    (curr, prev) => {
-      'worklet';
-      if (curr !== prev) scheduleOnRN(setSelectedIndex, curr);
-    }
-  );
 
   const wrapStyle = useAnimatedStyle(() => {
     'worklet';
