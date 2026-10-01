@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   interpolate,
   useAnimatedStyle,
@@ -6,6 +7,8 @@ import {
 import { PULL_HOLD_OFFSET, type RefreshTabState } from '../utils/refresh';
 import { collapseTranslateY, getHeaderScrollOffset } from '../utils/paging';
 import type { ContainerProps } from '../types';
+
+const IS_ANDROID = Platform.OS === 'android';
 
 export function useContainerAnimatedStyles({
   scrollY,
@@ -32,46 +35,71 @@ export function useContainerAnimatedStyles({
   pullDownBehavior: ContainerProps['pullDownBehavior'];
   headerHeight: SharedValue<number>;
 }) {
-  const pullIndicatorStyle = useAnimatedStyle(() => {
-    'worklet';
-    const offset = getHeaderScrollOffset(
-      activeIndex.value,
-      tabCount,
-      perPageScrollY,
-      scrollY,
-      scrollToTopIndex.value,
-      scrollToTopOffset.value
-    );
-    const reveal = interpolate(-offset, [0, PULL_HOLD_OFFSET], [0, 1], 'clamp');
-    const refresh = refreshStates.value[activeIndex.value];
-    return {
-      opacity:
-        refresh?.canRefresh || refresh?.refreshing || refresh?.pending
-          ? reveal
-          : 0,
-      transform: [{ scale: 0.6 + 0.4 * reveal }],
-    };
-  });
+  const pullIndicatorStyle = useAnimatedStyle(
+    IS_ANDROID
+      ? () => {
+          'worklet';
+          const offset = getHeaderScrollOffset(
+            activeIndex.value,
+            tabCount,
+            perPageScrollY,
+            scrollY,
+            scrollToTopIndex.value,
+            scrollToTopOffset.value
+          );
+          const reveal = interpolate(
+            -offset,
+            [0, PULL_HOLD_OFFSET],
+            [0, 1],
+            'clamp'
+          );
+          const refresh = refreshStates.value[activeIndex.value];
+          return {
+            opacity:
+              refresh?.canRefresh || refresh?.refreshing || refresh?.pending
+                ? reveal
+                : 0,
+            transform: [{ scale: 0.6 + 0.4 * reveal }],
+          };
+        }
+      : () => {
+          'worklet';
+          // Only Android renders this indicator. Keep its unused updater free
+          // of scroll inputs on iOS/web rather than running it on every frame.
+          return { opacity: 0, transform: [{ scale: 0.6 }] };
+        }
+  );
 
-  const pagerStyle = useAnimatedStyle(() => {
-    'worklet';
-    const offset = getHeaderScrollOffset(
-      activeIndex.value,
-      tabCount,
-      perPageScrollY,
-      scrollY,
-      scrollToTopIndex.value,
-      scrollToTopOffset.value
-    );
-    return {
-      transform: [
-        { translateX: translateX.value },
-        {
-          translateY: usesCustomPullSV.value && offset < 0 ? -offset : 0,
-        },
-      ],
-    };
-  });
+  const pagerStyle = useAnimatedStyle(
+    IS_ANDROID
+      ? () => {
+          'worklet';
+          const offset = getHeaderScrollOffset(
+            activeIndex.value,
+            tabCount,
+            perPageScrollY,
+            scrollY,
+            scrollToTopIndex.value,
+            scrollToTopOffset.value
+          );
+          return {
+            transform: [
+              { translateX: translateX.value },
+              {
+                translateY: usesCustomPullSV.value && offset < 0 ? -offset : 0,
+              },
+            ],
+          };
+        }
+      : () => {
+          'worklet';
+          // Selecting a separate closure matters: Reanimated subscribes to
+          // captured shared values, even when a branch never reads them.
+          return {
+            transform: [{ translateX: translateX.value }, { translateY: 0 }],
+          };
+        }
+  );
 
   const stretch = pullDownBehavior === 'stretch';
   const collapsibleHeaderStyle = useAnimatedStyle(() => {

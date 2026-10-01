@@ -34,6 +34,7 @@ import type { RefreshTabState } from '../utils/refresh';
 import { clampTabIndex } from '../utils/paging';
 import type {
   ContainerProps,
+  HeaderRenderProps,
   InternalTabsContextValue,
   TabBarRenderProps,
   TabsRef,
@@ -149,6 +150,26 @@ interface ContainerContentProps {
   mountedTabIndices: Set<number>;
 }
 
+interface HeaderRendererProps extends HeaderRenderProps {
+  renderer: NonNullable<ContainerProps['renderHeader']>;
+  // Width is an internal invalidation input; it is not part of the public
+  // render props. Resizing must still let the renderer recreate its content.
+  layoutWidth: number;
+}
+
+// Keep expensive consumer header trees out of selected-index reconciliation.
+// React still propagates descendant context and local state through this memo
+// boundary. Keep host wrappers and measurement callbacks outside it.
+const HeaderRenderer = memo(function HeaderRenderer({
+  renderer,
+  scrollY,
+  headerHeight,
+  topInset,
+  pinnedHeaderHeight,
+}: HeaderRendererProps) {
+  return renderer({ scrollY, headerHeight, topInset, pinnedHeaderHeight });
+});
+
 function ContainerContentBase({
   tabs,
   renderHeader,
@@ -233,12 +254,14 @@ function ContainerContentBase({
           : undefined
       }
     >
-      {renderPinnedHeader({
-        scrollY,
-        headerHeight,
-        topInset,
-        pinnedHeaderHeight: resolvedPinnedHeaderHeight,
-      })}
+      <HeaderRenderer
+        renderer={renderPinnedHeader}
+        scrollY={scrollY}
+        headerHeight={headerHeight}
+        topInset={topInset}
+        pinnedHeaderHeight={resolvedPinnedHeaderHeight}
+        layoutWidth={layoutWidth}
+      />
     </View>
   ) : null;
 
@@ -254,12 +277,14 @@ function ContainerContentBase({
           pointerEvents="box-none"
           onLayout={(e) => onHeaderHeight(e.nativeEvent.layout.height)}
         >
-          {renderHeader({
-            scrollY,
-            headerHeight,
-            topInset,
-            pinnedHeaderHeight: resolvedPinnedHeaderHeight,
-          })}
+          <HeaderRenderer
+            renderer={renderHeader}
+            scrollY={scrollY}
+            headerHeight={headerHeight}
+            topInset={topInset}
+            pinnedHeaderHeight={resolvedPinnedHeaderHeight}
+            layoutWidth={layoutWidth}
+          />
         </Animated.View>
       ) : null}
 

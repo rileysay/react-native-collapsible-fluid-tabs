@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import {
   SafeAreaInsetsContext,

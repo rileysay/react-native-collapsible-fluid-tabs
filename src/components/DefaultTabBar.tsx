@@ -293,7 +293,7 @@ function ScrollableBar({
   pullPanGesture,
 }: BarProps) {
   const tabCount = tabs.length;
-  const scrollRef = useAnimatedRef<ScrollView>();
+  const scrollRef = useAnimatedRef<React.ComponentRef<typeof ScrollView>>();
   const reduceMotion = useReducedMotion();
   // Measured { x, width } for each tab, in content coordinates — drives the
   // variable-width pill and the auto-scroll centering.
