@@ -10976,9 +10976,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native@patch:react-native@npm%3A0.86.3#~/.yarn/patches/react-native-npm-0.86.3-a26c4d71a9.patch":
+"react-native@patch:react-native@npm%3A0.86.3#~/.yarn/patches/react-native-npm-0.86.3-native-scroll-v2.patch":
   version: 0.86.3
-  resolution: "react-native@patch:react-native@npm%3A0.86.3#~/.yarn/patches/react-native-npm-0.86.3-a26c4d71a9.patch::version=0.86.3&hash=658588"
+  resolution: "react-native@patch:react-native@npm%3A0.86.3#~/.yarn/patches/react-native-npm-0.86.3-native-scroll-v2.patch::version=0.86.3&hash=f9ce24"
   dependencies:
     "@react-native/assets-registry": "npm:0.86.3"
     "@react-native/codegen": "npm:0.86.3"
@@ -11023,7 +11023,7 @@ __metadata:
       optional: true
   bin:
     react-native: cli.js
-  checksum: 10c0/9c81c089e8f5606abca2fdbd13c85894aa4a376b4cde89023ba4125a3c58c7b721df21ba25a98037ba9602539430cf044975b671912723a5428c5d2b9f9caa73
+  checksum: 10c0/c79e1489ee59661325a342ed2f7e815d096960bf205026225c45ad4f734fe88d3b00e4fab1eece84422192611f89ec00a82a18f247cd8598ac8910e2c1fce805
   languageName: node
   linkType: hard
 

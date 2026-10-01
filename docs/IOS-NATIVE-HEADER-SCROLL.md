@@ -43,8 +43,13 @@ written frame by frame.
   the list, so the gesture is never attached to two detectors.
 - A touch that starts on the header or tab bar while the list is still coasting
   stops the coast first, so the tap reaches the control instead of only
-  catching the fling. iOS 17.4 and later use `stopScrollingAndZooming`; older
-  versions reset the current offset, which is undocumented and untested.
+  catching the fling. UIKit can query hit testing with an empty touch event
+  before the new pan begins; the coordinator handles that external hit only
+  while decelerating, with no observed pointer and a still-possible pan.
+  It does not use `isDragging` alone to classify that transition. List-origin
+  hits, an active pan and rubber-band overscroll are excluded from this stop.
+  iOS 17.4 and later use `stopScrollingAndZooming`; older versions reset the
+  current offset, an unverified compatibility fallback.
 - While registered, the JavaScript header drag is disabled on iOS.
 - Without registration, containers keep the JavaScript header drag.
 
@@ -62,7 +67,17 @@ written frame by frame.
 - React Native's `RCTScrollViewComponentView` hit-test fix (`efcab2090`,
   checked in 0.87.1), or a backport of it. Without it, a touch that hit-tests
   to the scroll view's wrapper view instead of the scroll view is treated as a
-  header touch. The example backports the fix in its React Native patch.
+  header touch. This applies to wrapper fallback hits, not every blank content
+  area: a content-container hit already descends from the scroll view.
+- The workspace's combined
+  [React Native 0.86.3 patch](../.yarn/patches/react-native-npm-0.86.3-native-scroll-v2.patch)
+  includes that backport, refresh painting/tint fixes, and Fabric momentum
+  completion after an explicit native stop. The completion change notifies
+  Fabric when `stopScrollingAndZooming` actually ends deceleration; Fabric
+  consumes its active momentum state before emitting the terminal event.
+  A later natural callback does not emit the same completion again. The
+  coordinator stop and this completion fix must be used together: stopping
+  UIKit alone left the next content tap blocked in the simulator reproduction.
 - A new development build. Metro reloads cannot add native code.
 
 ## Comparing
@@ -87,20 +102,23 @@ JavaScript header drag in the same build. Build the example with
 
 ## Status
 
-- **Build `58843ed9`:** the earlier prototype of the Gesture Handler patch.
-  Ran on an iPhone, where header drags got native momentum, overscroll, bounce
-  and refresh, and where the first tab-bar tap during a fling only stopped the
-  list.
-- **Build `ec3329f8`** (commit `f8ea8db`): the current Gesture Handler patch
-  and the coasting stop. Compiled; device checks are pending.
-- **Not yet in a build:** the `headerScrollEnabled` host prop and the React
-  Native hit-test backport. Both need a new development build.
-- Unverified on device: the measured pager placement, including right-to-left
-  layouts and `containerStyle` other than a plain column (a row direction,
-  wrapping, or a container sized by its content); whether React Native reports
-  the end of momentum after the coasting stop (without it, the next row tap can
-  be captured); both release orders of two-finger drags; and FlatList and
-  FlashList behavior.
+- **Native-v10, 1 October 2026:** the accepted audit fixes, coordinator coast
+  handling and combined React Native patch compiled in the isolated SDK 57
+  example. All 57 hosted native tests passed. Simulator integration exercised
+  LegendList, FlatList, FlashList and ScrollView, including first taps during
+  coasting and the subsequent content tap. These are bounded integration
+  results, not a claim of every gesture or every device passing.
+- The full final gesture-matrix review is pending. Its automation fixtures,
+  diagnostic logs and cloud-machine configuration are not part of the package.
+  The portable native tests are available through the example's opt-in
+  [test harness](../example/native-test-harness).
+- The tested simulator used an isolated Expo scene-support overlay for
+  Xcode 27. This repository retains its existing Expo dependency versions;
+  see [native validation](./NATIVE-VALIDATION.md) before reproducing that setup.
+- Physical-device checks remain open, including threshold haptics, older iOS
+  stop behavior, both release orders of two-finger drags, and accessibility
+  interaction. RTL and uncommon container layouts still need native layout
+  checks; source/JS tests alone do not establish their UIKit behavior.
 - iOS list refresh shorthand creates React Native's `RefreshControl` instead
   of Gesture Handler's. This is experimental and applies with or without
   native header scroll.
@@ -108,3 +126,9 @@ JavaScript header drag in the same build. Build the example with
   pan. A horizontal swipe that starts on the header does not change tabs, as
   in 1.5.1. A vertical header drag that starts while a page change is still
   animating is held until the page settles.
+
+This remains a workspace-only native experiment. The local Expo module and
+Yarn dependency patches are not included automatically by installing the
+published JavaScript package. Consumer integration requires the native module,
+matching reviewed dependency patches and a new native build. No upstream PR
+has been opened by this work.

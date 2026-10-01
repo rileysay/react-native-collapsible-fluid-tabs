@@ -1,0 +1,166 @@
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm
+index 60160efb163d91813fa2ca7ca758b51afcf261e1..f2b721cd58de7c434b0d5491f27e9266c044d77b 100644
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm
+@@ -6,6 +6,8 @@
+  */
+ 
+ #import "RCTPullToRefreshViewComponentView.h"
++
++#import <QuartzCore/QuartzCore.h>
+ 
+ #import <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
+ #import <react/renderer/components/FBReactNativeSpec/EventEmitters.h>
+@@ -92,7 +94,8 @@
+   const auto &oldConcreteProps = static_cast<const PullToRefreshViewProps &>(*_props);
+   const auto &newConcreteProps = static_cast<const PullToRefreshViewProps &>(*props);
+ 
+-  if (_recycled || newConcreteProps.tintColor != oldConcreteProps.tintColor) {
++  // Initial tint is applied in _attach, after UIKit installs the refresh control.
++  if (_scrollViewComponentView && (_recycled || newConcreteProps.tintColor != oldConcreteProps.tintColor)) {
+     _refreshControl.tintColor = RCTUIColorFromSharedColor(newConcreteProps.tintColor);
+   }
+ 
+@@ -141,11 +144,9 @@
+ 
+ - (void)_updateProgressViewOffset:(Float)progressViewOffset
+ {
+-  _refreshControl.bounds = CGRectMake(
+-      _refreshControl.bounds.origin.x,
+-      -progressViewOffset,
+-      _refreshControl.bounds.size.width,
+-      _refreshControl.bounds.size.height);
++  // UIKit lays out its content at bounds.origin, cancelling a bounds offset.
++  // Translate the rendered content without changing native scroll or refresh geometry.
++  _refreshControl.layer.sublayerTransform = CATransform3DMakeTranslation(0, progressViewOffset, 0);
+ }
+ 
+ - (void)_updateTitle
+@@ -206,6 +207,10 @@
+ 
+   if (@available(macCatalyst 13.1, *)) {
+     _scrollViewComponentView.scrollView.refreshControl = _refreshControl;
++
++    // Apply tint after attachment to address the reported missing pull haptic.
++    const auto &concreteProps = static_cast<const PullToRefreshViewProps &>(*_props);
++    _refreshControl.tintColor = RCTUIColorFromSharedColor(concreteProps.tintColor);
+ 
+     // This ensures that layoutSubviews is called. Without this, recycled instances won't refresh on mount
+     [self setNeedsLayout];
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.h b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.h
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.h
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.h
+@@ -20,6 +20,10 @@
+ @protocol RCTEnhancedScrollViewOverridingDelegate <NSObject>
+ 
+ - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
++
++@optional
++// Explicit UIKit stops need not deliver scrollViewDidEndDecelerating:.
++- (void)scrollViewDidStopScrollingAndZooming:(UIScrollView *)scrollView;
+ 
+ @end
+ 
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.mm
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTEnhancedScrollView.mm
+@@ -121,6 +121,16 @@
+   }
+ 
+   return [super touchesShouldCancelInContentView:view];
++}
++
++- (void)stopScrollingAndZooming API_AVAILABLE(ios(17.4))
++{
++  BOOL wasDecelerating = self.isDecelerating;
++  [super stopScrollingAndZooming];
++  if (wasDecelerating && !self.isDecelerating &&
++      [_overridingDelegate respondsToSelector:@selector(scrollViewDidStopScrollingAndZooming:)]) {
++    [_overridingDelegate scrollViewDidStopScrollingAndZooming:self];
++  }
+ }
+ 
+ #pragma mark - RCTGenericDelegateSplitter
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+@@ -102,6 +102,9 @@
+   // This helps to only update state from `scrollViewDidScroll` in case
+   // some other part of the system scrolls scroll view.
+   BOOL _isUserTriggeredScrolling;
++  // Independent of the emitter, so explicit and UIKit completion paths consume
++  // the same native deceleration once, including emitter-less transitions.
++  BOOL _isMomentumScrolling;
+   BOOL _shouldUpdateContentInsetAdjustmentBehavior;
+   BOOL _automaticallyAdjustKeyboardInsets;
+ 
+@@ -523,7 +526,7 @@
+     }
+   }
+ 
+-  return isPointInside ? self : nil;
++  return isPointInside ? _scrollView : nil;
+ }
+ 
+ /*
+@@ -676,6 +679,7 @@
+ - (void)prepareForRecycle
+ {
+   [super prepareForRecycle];
++  _isMomentumScrolling = NO;
+   // Must invalidate state before setting contentOffset on ScrollView.
+   // Otherwise the state will be propagated to shadow tree.
+   _state.reset();
+@@ -807,6 +811,7 @@
+ 
+ - (void)scrollViewWillBeginDecelerating:(UIScrollView *)scrollView
+ {
++  _isMomentumScrolling = YES;
+   [self _forceDispatchNextScrollEvent];
+ 
+   if (!_eventEmitter) {
+@@ -818,6 +823,13 @@
+ 
+ - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
+ {
++  // A stop can complete synchronously, with a later UIKit callback for that
++  // same coast. A callback while native deceleration continues is not terminal.
++  if (!_isMomentumScrolling || scrollView.isDecelerating) {
++    return;
++  }
++  _isMomentumScrolling = NO;
++  _isUserTriggeredScrolling = NO;
+   [self _forceDispatchNextScrollEvent];
+ 
+   if (!_eventEmitter) {
+@@ -831,6 +843,11 @@
+   RCTSendScrollEventForNativeAnimations_DEPRECATED(scrollView, self.tag, kOnScrollEndEvent);
+ }
+ 
++- (void)scrollViewDidStopScrollingAndZooming:(UIScrollView *)scrollView
++{
++  [self scrollViewDidEndDecelerating:scrollView];
++}
++
+ - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView
+ {
+   [self _handleFinishedScrolling:scrollView];
+@@ -849,6 +866,8 @@
+ - (void)_handleScrollEndIfNeeded
+ {
+   if (_scrollView.isDecelerating || !_scrollView.isTracking) {
++    _isMomentumScrolling = NO;
++    _isUserTriggeredScrolling = NO;
+     if (!_eventEmitter) {
+       return;
+     }
+@@ -861,6 +880,9 @@
+ 
+ - (void)_handleFinishedScrolling:(UIScrollView *)scrollView
+ {
++  if (!scrollView.isDecelerating) {
++    _isMomentumScrolling = NO;
++  }
+   [self _forceDispatchNextScrollEvent];
+   [self scrollViewDidScroll:scrollView];
+ 

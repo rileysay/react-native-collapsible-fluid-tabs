@@ -26,14 +26,19 @@ static void CollectOuterScrollViews(UIView *view, NSMutableSet<UIScrollView *> *
 // the touch: the tap then reaches the control, and a drag still begins from the
 // stopped position. Touches on the list itself keep UIKit's catch behavior.
 //
-// Unresolved completion requirement: it is unverified whether UIKit, and so
-// React Native, delivers scrollViewDidEndDecelerating / onMomentumScrollEnd
-// after this stop. Without it, React Native's ScrollView keeps _isAnimating()
-// true and captures the next touch on a list row. Measure on a device before
-// treating this as fixed; do not synthesize an end event without evidence.
+// Fabric's EnhancedScrollView must complete its own native momentum cycle
+// when stopScrollingAndZooming returns. UIKit need not deliver a delegate end
+// for that explicit stop; without RN's completion, its next row tap is captured.
+// The pre-17.4 fallback remains a separate native-device validation requirement.
 static void StopCoastingForExternalTouch(UIScrollView *scrollView)
 {
-  if (!scrollView.isDecelerating || scrollView.isDragging) return;
+  UIGestureRecognizerState panState = scrollView.panGestureRecognizer.state;
+  // During momentum catch, UIKit can report dragging while the pan is still
+  // Possible. Preserve an actual recognized drag, not that earlier flag.
+  if (!scrollView.isDecelerating ||
+      (scrollView.isDragging && panState != UIGestureRecognizerStatePossible) ||
+      panState == UIGestureRecognizerStateBegan ||
+      panState == UIGestureRecognizerStateChanged) return;
   UIEdgeInsets inset = scrollView.adjustedContentInset;
   CGPoint offset = scrollView.contentOffset;
   CGFloat minY = -inset.top;
@@ -290,7 +295,7 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
 {
   // Hit-testing precedes recognizer delivery, including a native pan that
   // catches deceleration on touch-down. Record the actual hit origin early.
-  if (!_owner || event.type != UIEventTypeTouches) return;
+  if (!_owner || !event || event.type != UIEventTypeTouches) return;
   BOOL hasBeganTouch = NO;
   for (UITouch *touch in event.allTouches) {
     if (touch.phase == UITouchPhaseBegan) {
@@ -298,15 +303,22 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
       break;
     }
   }
-  if (!hasBeganTouch) return;
+  // UIKit can hit-test a new touch before it appears in allTouches. Only
+  // prepare an empty touch event while coasting, with no observed pointers or
+  // recognized pan. Nil events and ongoing streams never take this path.
+  BOOL isInitialCoastingHit = event.allTouches.count == 0 &&
+      _pointers.pointerCount == 0 && _owner.isDecelerating &&
+      _owner.panGestureRecognizer.state == UIGestureRecognizerStatePossible;
+  if (!hasBeganTouch && !isInitialCoastingHit) return;
   RNGHExternalScrollRecordHitView(_owner.panGestureRecognizer, view);
-  // Only a beginning touch outside the list, and only once per touch. A hit
-  // inside the list must not consume the stop check: with two new fingers, the
-  // list finger can be hit-tested before the header finger. If the new touch
-  // is not yet in allTouches during hit-testing, this is a no-op (device
-  // check), never a stop for an unrelated event.
+  // Only an initial hit outside the list can stop the coast. An inside hit
+  // must not consume the check: with two new fingers, UIKit can hit-test the
+  // list finger before the header finger. Populated events retain per-touch
+  // deduplication; the qualified empty initial event is handled separately.
   if ([view isDescendantOfView:_owner]) return;
-  BOOL hasUncheckedBeganTouch = NO;
+  // The empty-event path has no touch identity yet; stopping clears native
+  // deceleration, so repeated hit-tests cannot stop that same coast again.
+  BOOL hasUncheckedBeganTouch = isInitialCoastingHit;
   for (UITouch *touch in event.allTouches) {
     if (touch.phase == UITouchPhaseBegan && ![_stopCheckedTouches containsObject:touch]) {
       [_stopCheckedTouches addObject:touch];
