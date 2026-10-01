@@ -9,13 +9,15 @@ corepack yarn example start --port 8082
 
 Open the example in a development build, or press `w` for web. The playground uses Expo Router (`router.push('/x')`, `/instagram`, `/lab`).
 
-The home screen opens three demos:
+The home screen opens three main demos:
 
 | Demo        | Tabs                                        | List adapters                 |
 | ----------- | ------------------------------------------- | ----------------------------- |
 | X           | Posts, Replies, Media, Likes                | LegendList in every tab       |
 | Instagram   | Posts, Reels, Tagged                        | LegendList in every tab       |
 | Lab         | FlatList, LegendList, ScrollView, FlashList | The adapter named by each tab |
+
+On this branch the home screen also opens three comparison cards for [iOS native header scroll](../docs/IOS-NATIVE-HEADER-SCROLL.md): **04 / Before** (the published 1.5.1 package), **04B / Before + pointer events** (1.5.1 with header touches passed through to the list) and **05 / After** (this branch). Each uses LegendList, FlatList, FlashList and ScrollView tabs. Chips in its header switch the pull mode, refresh style, start tab and an inline list renderer, and development builds log momentum, row taps and tab changes to Metro with a `[header-scroll]` prefix. Native header scroll needs a development build that includes `modules/fluid-tabs-native-scroll`; Expo Go and web use the JavaScript header drag. Start Metro with `EXPO_PUBLIC_NATIVE_HEADER_SCROLL=off` to compare this branch's JavaScript header drag in the same build.
 
 The social profiles are illustrative layouts with fictional content. Photos are bundled for offline testing; their sources are recorded in [assets/photos/README.md](./assets/photos/README.md). The Reels tab uses still previews, not video playback. Refresh simulates a request lasting 1.5 seconds.
 

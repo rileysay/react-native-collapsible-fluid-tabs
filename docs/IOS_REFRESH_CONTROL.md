@@ -1,6 +1,6 @@
 # iOS native refresh visibility and haptics
 
-Status: experimental native patch implemented locally; no successful native compile or physical-device verification is recorded here. On 14 September 2026, the build submission was blocked by the Expo account's monthly free iOS build quota. EAS uploaded the project but created no build, and the CLI reported a reset on 1 October 2026. The client used for that diagnostic did not contain this change. These are historical build/account observations, not a live account or installed-client status check.
+Status: experimental native patch. It has since compiled in the example's EAS development builds `58843ed9` and `ec3329f8`, which build React Native from source with this patch; the spinner and haptic device checks below are still not recorded. Since the native-scroll beta, iOS list refresh shorthand creates React Native's own `RefreshControl`; the default tint and offset still apply. The rest of this section is the original record: On 14 September 2026, the build submission was blocked by the Expo account's monthly free iOS build quota. EAS uploaded the project but created no build, and the CLI reported a reset on 1 October 2026. The client used for that diagnostic did not contain this change. These are historical build/account observations, not a live account or installed-client status check.
 
 ## Observations recorded on 14 September 2026
 

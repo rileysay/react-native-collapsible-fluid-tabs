@@ -23,3 +23,16 @@ index 60160efb163d91813fa2ca7ca758b51afcf261e1..5f7f4ad45f848267b63ab011eca25738
      // This ensures that layoutSubviews is called. Without this, recycled instances won't refresh on mount
      [self setNeedsLayout];
    }
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+index 9ab1db4..02d9907 100644
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+@@ -523,7 +523,7 @@ static inline UIViewAnimationOptions animationOptionsWithCurve(UIViewAnimationCu
+     }
+   }
+ 
+-  return isPointInside ? self : nil;
++  return isPointInside ? _scrollView : nil;
+ }
+ 
+ /*

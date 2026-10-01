@@ -14,6 +14,9 @@ public final class FluidTabsNativeScrollModule: Module {
       Prop("paging", false) { (view, paging: Bool) in
         view.paging = paging
       }
+      Prop("headerScrollEnabled", true) { (view, enabled: Bool) in
+        view.headerScrollEnabled = enabled
+      }
       // Expo applies a dictionary of animated props in unspecified key order.
       // Reconcile once after the complete UI-thread transaction, not per setter.
       OnViewDidUpdateProps { (view: FluidTabsNativeScrollHost) in

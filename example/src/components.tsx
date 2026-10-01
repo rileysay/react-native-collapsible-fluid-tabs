@@ -65,6 +65,8 @@ export function Button({
       onAccessibilityTap={disabled ? undefined : onPress}
       {...(Platform.OS === 'web'
         ? {
+            // Gesture Handler already presses the button on Enter/Space keyup.
+            // Only suppress the key's default action (Space scrolls the page).
             onKeyDown: ((event) => {
               if (
                 !disabled &&
@@ -72,7 +74,6 @@ export function Button({
                   event.nativeEvent.key === ' ')
               ) {
                 event.preventDefault();
-                onPress();
               }
             }) satisfies NonNullable<ViewProps['onKeyDown']>,
           }
@@ -218,12 +219,11 @@ function ProfileTab({
         {...(Platform.OS === 'web'
           ? {
               tabIndex: 0,
+              // The Tap gesture already activates on Enter/Space. Only
+              // suppress the key's default action (Space scrolls the page).
               onKeyDown: ((event) => {
                 const key = event.nativeEvent.key;
-                if (key === 'Enter' || key === ' ') {
-                  event.preventDefault();
-                  onTabPress(index);
-                }
+                if (key === 'Enter' || key === ' ') event.preventDefault();
               }) satisfies NonNullable<ViewProps['onKeyDown']>,
             }
           : {})}

@@ -21,6 +21,7 @@ import type { ContainerProps, TabBarRenderProps, TabsRef } from '../../types';
 import { Container } from '../Container';
 import { Tab } from '../Tab';
 import { useTabsContext } from '../../context';
+import { stopScrollAtOffset } from '../../utils/scrollRef';
 
 const mockRNQueue: (() => void)[] = [];
 let mockHandlerTag = 1;
@@ -78,6 +79,16 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
 }));
 jest.mock('../DefaultTabBar', () => ({ DefaultTabBar: () => null }));
+// Keep the real helper; the spy only records which pages are stopped.
+jest.mock('../../utils/scrollRef', () => {
+  const actual = jest.requireActual<typeof import('../../utils/scrollRef')>(
+    '../../utils/scrollRef'
+  );
+  return {
+    ...actual,
+    stopScrollAtOffset: jest.fn(actual.stopScrollAtOffset),
+  };
+});
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
@@ -539,4 +550,146 @@ it.each([
   expect(context.perPageScrollY[1]).not.toBe(previousOffsets[1]);
   expect(context.perPageScrollY[1]!.value).toBe(0);
   expect(pagerRef.current!.getIndex()).toBe(1);
+});
+
+it.each([
+  [
+    'imperative',
+    (to: number) => act(() => pagerRef.current!.setIndex(to, false)),
+  ],
+  ['controlled', (to: number) => renderPager({ index: to })],
+])(
+  'stops the outgoing page through the bounded stop on %s navigation',
+  (_kind, navigate) => {
+    // A same-offset scroll is skipped by Fabric, so plain alignment of the
+    // outgoing page would leave a fling coasting after a programmatic change.
+    const from = context.activeIndex.value;
+    const to = from === 0 ? 2 : 0;
+    context.headerHeight.value = 100;
+    context.listMounted[from]!.value = true;
+    context.listScrollMetrics[from]!.value = {
+      ...context.listScrollMetrics[from]!.value,
+      viewportHeight: 500,
+      contentHeight: 1000,
+    };
+    context.perPageScrollY[from]!.value = 300;
+    context.scrollY.value = 300;
+    jest.mocked(stopScrollAtOffset).mockClear();
+
+    navigate(to);
+
+    expect(stopScrollAtOffset).toHaveBeenCalledWith(
+      context.listRefs[from],
+      context.listMounted[from],
+      300,
+      500
+    );
+  }
+);
+
+it('leaves an outgoing page alone when its stop declines', () => {
+  // iOS declines to stop a list bouncing past its bottom; UIKit finishes the
+  // bounce, so navigation must not clamp that page back into range either.
+  const from = context.activeIndex.value;
+  const to = from === 0 ? 2 : 0;
+  context.headerHeight.value = 100;
+  context.listMounted[from]!.value = true;
+  context.listScrollMetrics[from]!.value = {
+    ...context.listScrollMetrics[from]!.value,
+    viewportHeight: 500,
+    contentHeight: 1000,
+  };
+  context.perPageScrollY[from]!.value = 540;
+  context.scrollY.value = 540;
+  jest.mocked(stopScrollAtOffset).mockClear().mockReturnValueOnce(false);
+  jest.mocked(scrollTo).mockClear();
+
+  act(() => pagerRef.current!.setIndex(to, false));
+
+  expect(stopScrollAtOffset).toHaveBeenCalledWith(
+    context.listRefs[from],
+    context.listMounted[from],
+    540,
+    500
+  );
+  expect(
+    jest
+      .mocked(scrollTo)
+      .mock.calls.filter(([ref]) => ref === context.listRefs[from])
+  ).toEqual([]);
+  expect(context.perPageScrollY[from]!.value).toBe(540);
+});
+
+describe('aligning mounted pages on navigation', () => {
+  const flushPendingOffsets = () => {
+    for (const [prepare, react] of jest.mocked(useAnimatedReaction).mock
+      .calls) {
+      const next = prepare() as { pendingOffset?: number | null } | null;
+      if (next && typeof next === 'object' && 'pendingOffset' in next) {
+        react(next, null);
+      }
+    }
+  };
+  const commandsFor = (index: number) =>
+    jest
+      .mocked(scrollTo)
+      .mock.calls.filter(([ref]) => ref === context.listRefs[index])
+      .map(([, , y]) => y);
+
+  // The active page is collapsed at 300 with a 100-point header, so every
+  // other page is aligned to the collapsed offset, 100.
+  function setUpNavigation(geometry: {
+    viewportHeight: number;
+    contentHeight: number;
+  }) {
+    const from = context.activeIndex.value;
+    const to = from === 0 ? 2 : 0;
+    context.headerHeight.value = 100;
+    context.perPageScrollY[from]!.value = 300;
+    context.scrollY.value = 300;
+    context.listMounted[to]!.value = true;
+    context.listScrollMetrics[to]!.value = {
+      ...context.listScrollMetrics[to]!.value,
+      ...geometry,
+    };
+    jest.mocked(scrollTo).mockClear();
+    return to;
+  }
+
+  it('clamps a measured short page to its scrollable range', () => {
+    const to = setUpNavigation({ viewportHeight: 500, contentHeight: 500 });
+    act(() => pagerRef.current!.setIndex(to, false));
+
+    expect(commandsFor(to)).toEqual([0]);
+    expect(context.perPageScrollY[to]!.value).toBe(0);
+    expect(context.scrollY.value).toBe(0);
+  });
+
+  it('aligns a measured tall page to the requested offset', () => {
+    const to = setUpNavigation({ viewportHeight: 500, contentHeight: 1000 });
+    act(() => pagerRef.current!.setIndex(to, false));
+
+    expect(commandsFor(to)).toEqual([100]);
+    expect(context.perPageScrollY[to]!.value).toBe(100);
+    expect(context.scrollY.value).toBe(100);
+  });
+
+  it('keeps an unmeasured mounted page pending until its geometry exists', () => {
+    const to = setUpNavigation({ viewportHeight: 0, contentHeight: 0 });
+    act(() => pagerRef.current!.setIndex(to, false));
+
+    expect(commandsFor(to)).toEqual([]);
+    expect(context.perPageScrollY[to]!.value).toBe(100);
+
+    context.listScrollMetrics[to]!.value = {
+      ...context.listScrollMetrics[to]!.value,
+      viewportHeight: 500,
+      contentHeight: 500,
+    };
+    act(flushPendingOffsets);
+    // The same short geometry ends where an eagerly measured page does.
+    expect(commandsFor(to)).toEqual([0]);
+    expect(context.perPageScrollY[to]!.value).toBe(0);
+    expect(context.scrollY.value).toBe(0);
+  });
 });

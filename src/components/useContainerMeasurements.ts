@@ -46,6 +46,8 @@ export function useContainerMeasurements({
   const measuredHeaderHeight = hasHeader ? lastHeaderHeight : 0;
   const [measuredContainerHeight, setMeasuredContainerHeight] = useState(0);
   const [measuredContainerWidth, setMeasuredContainerWidth] = useState(0);
+  // The pager's own viewport: the container minus its padding and borders.
+  const [measuredPagerWidth, setMeasuredPagerWidth] = useState(0);
 
   const resolvedMinContentHeight =
     minPageContentHeight ??
@@ -79,6 +81,8 @@ export function useContainerMeasurements({
     setMeasuredContainerHeight,
     setMeasuredContainerWidth,
     measuredContainerWidth,
+    setMeasuredPagerWidth,
+    measuredPagerWidth,
     setMeasuredPinnedTotal,
     measuredHeaderHeight,
     resolvedMinContentHeight,

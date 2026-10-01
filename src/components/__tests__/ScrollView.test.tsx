@@ -13,6 +13,8 @@ let mockDetectors: { gesture: unknown; child: unknown }[];
 let mockRefreshArgs: unknown[][];
 let mockMetricsCallbacks: Record<string, unknown>[];
 const mockScrollNode = { node: 'scroll-view' };
+// Bumping this remounts the native host, as Android's refresh wrapper does.
+let mockHostGeneration = 0;
 const mockRefreshElement = { sentinel: 'refresh-control' };
 const mockMetricsOnLayout = () => {};
 const mockMetricsOnSize = () => {};
@@ -45,6 +47,54 @@ jest.mock('react-native-gesture-handler', () => ({
 }));
 jest.mock('react-native-reanimated', () => {
   const React = jest.requireActual<typeof import('react')>('react');
+  // One stable component type, so only a changed key remounts the host.
+  function MockNativeHost({
+    hostRef,
+    children,
+  }: {
+    hostRef?: Ref<unknown>;
+    children?: ReactNode;
+  }) {
+    const [node] = React.useState(() =>
+      mockHostGeneration === 0
+        ? mockScrollNode
+        : { node: 'scroll-view', generation: mockHostGeneration }
+    );
+    React.useImperativeHandle(hostRef, () => node, [node]);
+    return React.createElement('div', { 'data-scroller': '' }, children);
+  }
+  // Reanimated's native AnimatedComponent: one stable callback on the host,
+  // forwarding to whichever forwardedRef is current when a host attaches.
+  class MockAnimatedComponent extends React.Component<{
+    forwardedRef?: Ref<unknown>;
+    children?: ReactNode;
+  }> {
+    cleanup: (() => void) | undefined;
+    setComponentRef = (node: unknown) => {
+      const ref = this.props.forwardedRef;
+      if (node === null) {
+        if (this.cleanup) this.cleanup();
+        else if (typeof ref === 'function') ref(null);
+        else if (ref) (ref as { current: unknown }).current = null;
+        this.cleanup = undefined;
+        return;
+      }
+      if (typeof ref === 'function') {
+        const cleanup: unknown = ref(node);
+        this.cleanup =
+          typeof cleanup === 'function' ? (cleanup as () => void) : undefined;
+      } else if (ref) {
+        (ref as { current: unknown }).current = node;
+      }
+    };
+    render() {
+      return React.createElement(
+        MockNativeHost,
+        { key: mockHostGeneration, hostRef: this.setComponentRef },
+        this.props.children
+      );
+    }
+  }
   return {
     __esModule: true,
     default: {
@@ -55,12 +105,11 @@ jest.mock('react-native-reanimated', () => {
         props: Record<string, any> & { ref?: Ref<unknown> }
       ) {
         mockScrollProps = props;
-        React.useImperativeHandle(props.ref, () => mockScrollNode, []);
-        return React.createElement(
-          'div',
-          { 'data-scroller': '' },
-          props.children
-        );
+        const { ref, ...rest } = props;
+        return React.createElement(MockAnimatedComponent, {
+          ...rest,
+          forwardedRef: ref,
+        });
       },
     },
     useAnimatedStyle: (updater: () => object) => updater(),
@@ -169,6 +218,7 @@ function placeAtTab(index: number) {
 }
 
 beforeEach(() => {
+  mockHostGeneration = 0;
   mockDetectors = [];
   mockRefreshArgs = [];
   mockMetricsCallbacks = [];
@@ -394,4 +444,67 @@ it('keeps refs attached across updates and detaches them on unmount', () => {
   expect(calls.at(-1)).toBeNull();
   expect(listRefCalls).toEqual([mockScrollNode, null]);
   expect(tabsContext.listMounted[0]!.value).toBe(false);
+});
+
+it('points the public and Container refs at a replaced native host', () => {
+  const publicRef = loaded.React.createRef<unknown>();
+  render({}, null, publicRef);
+  expect(publicRef.current).toBe(mockScrollNode);
+
+  mockHostGeneration = 1;
+  render({ keyboardDismissMode: 'on-drag' }, null, publicRef);
+
+  expect(listRef.current).toEqual({ node: 'scroll-view', generation: 1 });
+  expect(publicRef.current).toBe(listRef.current);
+});
+
+it('moves a replaced forwarded ref without detaching the Container ref', () => {
+  const first = jest.fn();
+  const second = jest.fn();
+  render({}, null, first);
+  render({}, null, second);
+
+  expect(first.mock.calls).toEqual([[mockScrollNode], [null]]);
+  expect(second.mock.calls).toEqual([[mockScrollNode]]);
+  expect(listRefCalls).toEqual([mockScrollNode]);
+});
+
+it("runs a callback ref's cleanup instead of calling it with null", () => {
+  const cleanup = jest.fn();
+  const callback = jest.fn(() => cleanup);
+  render({}, null, callback);
+  loaded.React.act(() => loaded.root.render(null));
+
+  expect(callback.mock.calls).toEqual([[mockScrollNode]]);
+  expect(cleanup).toHaveBeenCalledTimes(1);
+  expect(listRefCalls).toEqual([mockScrollNode, null]);
+});
+
+it('gives a replaced native host to the current forwarded ref only', () => {
+  const first = jest.fn();
+  const second = jest.fn();
+  render({}, null, first);
+  render({}, null, second);
+
+  mockHostGeneration = 1;
+  render({ keyboardDismissMode: 'on-drag' }, null, second);
+
+  const replaced = { node: 'scroll-view', generation: 1 };
+  expect(first.mock.calls).toEqual([[mockScrollNode], [null]]);
+  expect(second.mock.calls).toEqual([[mockScrollNode], [null], [replaced]]);
+  expect(listRef.current).toEqual(replaced);
+});
+
+it('gives a host replaced with the forwarded ref to the new ref only', () => {
+  const first = jest.fn();
+  const second = jest.fn();
+  render({}, null, first);
+
+  mockHostGeneration = 1;
+  render({ keyboardDismissMode: 'on-drag' }, null, second);
+
+  const replaced = { node: 'scroll-view', generation: 1 };
+  expect(first.mock.calls).toEqual([[mockScrollNode], [null]]);
+  expect(second.mock.calls).toEqual([[replaced]]);
+  expect(listRefCalls).toEqual([mockScrollNode, null, replaced]);
 });

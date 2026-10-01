@@ -39,7 +39,7 @@ import type {
   TabsRef,
 } from '../types';
 import { DefaultTabBar } from './DefaultTabBar';
-import { SingleHeaderHost } from './SingleHeader';
+import { isNativeHeaderScrollEnabled, SingleHeaderHost } from './SingleHeader';
 import { useWebWheelScroll } from './useWebWheelScroll';
 import {
   DEFAULT_SWIPE_ACTIVATION,
@@ -47,6 +47,7 @@ import {
   DEFAULT_SWIPE_DIRECTION_RATIO,
 } from '../utils/gestureDirection';
 import { useMountedTabs } from './useMountedTabs';
+import { useNativePagerFrame } from './useNativePagerFrame';
 import { usePagerListState } from './usePagerListState';
 import { usePagerGestures } from './usePagerGestures';
 import { useTabNavigation } from './useTabNavigation';
@@ -128,6 +129,7 @@ interface ContainerContentProps {
   onWebScrollStart: (index: number) => void;
   webScrollRef: Ref<ComponentRef<typeof View>> | undefined;
   onContainerLayout: (width: number, height: number) => void;
+  onPagerLayout: (width: number) => void;
   onPinnedHeaderHeight: (height: number) => void;
   onHeaderHeight: (height: number) => void;
   collapsibleHeaderStyle: ReturnType<
@@ -142,6 +144,7 @@ interface ContainerContentProps {
   tabCount: number;
   pagerStyle: ReturnType<typeof useContainerAnimatedStyles>['pagerStyle'];
   nativePaging: SharedValue<boolean>;
+  headerScrollEnabled: boolean;
   lazy: boolean;
   mountedTabIndices: Set<number>;
 }
@@ -171,6 +174,7 @@ function ContainerContentBase({
   onWebScrollStart,
   webScrollRef,
   onContainerLayout,
+  onPagerLayout,
   onPinnedHeaderHeight,
   onHeaderHeight,
   collapsibleHeaderStyle,
@@ -181,9 +185,16 @@ function ContainerContentBase({
   tabCount,
   pagerStyle,
   nativePaging,
+  headerScrollEnabled,
   lazy,
   mountedTabIndices,
 }: ContainerContentProps) {
+  const usesNativeHost = !IS_WEB && isNativeHeaderScrollEnabled();
+  const pagerFrame = useNativePagerFrame(
+    containerStyle,
+    usesNativeHost,
+    layoutWidth
+  );
   const tabBarProps: TabBarRenderProps = {
     tabs: tabs.map((t) => t.config),
     scrollY,
@@ -209,30 +220,30 @@ function ContainerContentBase({
     <DefaultTabBar {...tabBarProps} />
   );
 
+  const pinnedHeader = renderPinnedHeader ? (
+    <View
+      style={[
+        styles.pinnedHeader,
+        pinnedHeaderHeight != null ? { height: pinnedTotal } : null,
+      ]}
+      pointerEvents="box-none"
+      onLayout={
+        pinnedHeaderHeight == null
+          ? (e) => onPinnedHeaderHeight(e.nativeEvent.layout.height)
+          : undefined
+      }
+    >
+      {renderPinnedHeader({
+        scrollY,
+        headerHeight,
+        topInset,
+        pinnedHeaderHeight: resolvedPinnedHeaderHeight,
+      })}
+    </View>
+  ) : null;
+
   const chrome = (
     <>
-      {renderPinnedHeader ? (
-        <View
-          style={[
-            styles.pinnedHeader,
-            pinnedHeaderHeight != null ? { height: pinnedTotal } : null,
-          ]}
-          pointerEvents="box-none"
-          onLayout={
-            pinnedHeaderHeight == null
-              ? (e) => onPinnedHeaderHeight(e.nativeEvent.layout.height)
-              : undefined
-          }
-        >
-          {renderPinnedHeader({
-            scrollY,
-            headerHeight,
-            topInset,
-            pinnedHeaderHeight: resolvedPinnedHeaderHeight,
-          })}
-        </View>
-      ) : null}
-
       {renderHeader ? (
         <Animated.View
           style={[
@@ -309,12 +320,81 @@ function ContainerContentBase({
     </Animated.View>
   );
 
-  const pagerHost = <View style={styles.pagerHost}>{pagerRow}</View>;
+  const pagerHost = (
+    <View
+      style={styles.pagerHost}
+      onLayout={(e) => onPagerLayout(e.nativeEvent.layout.width)}
+    >
+      {pagerRow}
+    </View>
+  );
+
+  // With iOS native header scroll, the host carries the active list's pan, so
+  // the pinned area sits outside it and never drives the list. The region
+  // behind the pinned header takes touches on its blank parts and on a bare
+  // safe-area inset, as the JS header drag excludes the whole area; taps there
+  // do not reach the collapsed header behind it. The host fills the root like
+  // the absolute chrome it wraps. The root still resolves its own padding,
+  // around an empty probe where the pager used to be, and the pager is placed
+  // at the probe's measured frame. Until then it is hidden from sight, touch
+  // and accessibility, unless the whole host is known to be its place.
+  if (usesNativeHost) {
+    return (
+      <View
+        style={[styles.container, containerStyle]}
+        onLayout={(e) =>
+          onContainerLayout(
+            e.nativeEvent.layout.width,
+            e.nativeEvent.layout.height
+          )
+        }
+      >
+        {pinnedHeader}
+        {pinnedTotal > 0 ? (
+          <View
+            style={[styles.pinnedRegion, { height: pinnedTotal }]}
+            pointerEvents="auto"
+          />
+        ) : null}
+        <View
+          style={styles.contentProbe}
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          onLayout={pagerFrame.onProbeLayout}
+        />
+        <SingleHeaderHost
+          activeIndex={activeIndex}
+          paging={nativePaging}
+          headerScrollEnabled={headerScrollEnabled}
+          style={styles.nativeHost}
+          onLayout={pagerFrame.onHostLayout}
+        >
+          {chrome}
+          <View
+            style={[
+              styles.pagerFrame,
+              pagerFrame.style ?? styles.pagerFrameFill,
+              pagerFrame.ready ? null : styles.unresolved,
+            ]}
+            pointerEvents={pagerFrame.ready ? 'box-none' : 'none'}
+            accessibilityElementsHidden={!pagerFrame.ready}
+            importantForAccessibility={
+              pagerFrame.ready ? 'auto' : 'no-hide-descendants'
+            }
+          >
+            {pagerHost}
+          </View>
+        </SingleHeaderHost>
+      </View>
+    );
+  }
 
   return (
     <SingleHeaderHost
       activeIndex={activeIndex}
       paging={nativePaging}
+      headerScrollEnabled={headerScrollEnabled}
       ref={webScrollRef}
       style={[styles.container, containerStyle]}
       onLayout={(e) =>
@@ -327,11 +407,15 @@ function ContainerContentBase({
       {IS_WEB ? (
         <GestureDetector gesture={verticalGesture} touchAction="pan-x">
           <View style={styles.webChrome} pointerEvents="box-none">
+            {pinnedHeader}
             {chrome}
           </View>
         </GestureDetector>
       ) : (
-        chrome
+        <>
+          {pinnedHeader}
+          {chrome}
+        </>
       )}
       {IS_WEB ? (
         <GestureDetector gesture={pagerGestures} touchAction="pan-y">
@@ -415,6 +499,8 @@ function ContainerImpl(props: ContainerImplProps) {
     setMeasuredContainerHeight,
     setMeasuredContainerWidth,
     measuredContainerWidth,
+    setMeasuredPagerWidth,
+    measuredPagerWidth,
     setMeasuredPinnedTotal,
     measuredHeaderHeight,
     resolvedMinContentHeight,
@@ -434,13 +520,23 @@ function ContainerImpl(props: ContainerImplProps) {
     // Removing the header must also remove its spacer and collapse range.
     headerHeight.value = measuredHeaderHeight;
   }, [headerHeight, measuredHeaderHeight]);
-  const layoutWidth = measuredContainerWidth || screenWidth;
+  // Pages match the pager's clipping viewport, which container padding and
+  // borders make narrower than the container itself.
+  const layoutWidth =
+    measuredPagerWidth || measuredContainerWidth || screenWidth;
   const handleContainerLayout = useCallback(
     (width: number, height: number) => {
       setMeasuredContainerWidth(width);
       setMeasuredContainerHeight(height);
     },
     [setMeasuredContainerWidth, setMeasuredContainerHeight]
+  );
+  const handlePagerLayout = useCallback(
+    (width: number) => {
+      // A hidden container reports zero; keep the last visible viewport.
+      if (width > 0) setMeasuredPagerWidth(width);
+    },
+    [setMeasuredPagerWidth]
   );
 
   const scrollY = useSharedValue(0);
@@ -527,6 +623,7 @@ function ContainerImpl(props: ContainerImplProps) {
     scrollToTopOffset,
     scrollHandlers,
     freezeLists,
+    stopList,
     cancelScrollToTop,
     syncLists,
     alignList,
@@ -702,6 +799,7 @@ function ContainerImpl(props: ContainerImplProps) {
     reduceMotionSV,
     syncLists,
     alignList,
+    stopList,
     perPageScrollY,
     scrollY,
     scrollToTopIndex,
@@ -788,6 +886,7 @@ function ContainerImpl(props: ContainerImplProps) {
       onWebScrollStart={handleWebScrollStart}
       webScrollRef={webScrollRef}
       onContainerLayout={handleContainerLayout}
+      onPagerLayout={handlePagerLayout}
       onPinnedHeaderHeight={setMeasuredPinnedTotal}
       onHeaderHeight={handleHeaderHeight}
       collapsibleHeaderStyle={collapsibleHeaderStyle}
@@ -798,6 +897,7 @@ function ContainerImpl(props: ContainerImplProps) {
       tabCount={tabCount}
       pagerStyle={pagerStyle}
       nativePaging={nativePaging}
+      headerScrollEnabled={headerScrollEnabled}
       lazy={lazy}
       mountedTabIndices={mountedTabIndices}
     />
@@ -839,6 +939,27 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     elevation: 1000,
   },
+  pinnedRegion: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
+  },
+  nativeHost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  // The root's content box, where the pager goes. The explicit cross size
+  // keeps an empty view from collapsing under a non-stretching alignItems;
+  // the old pager followed its row's width there instead.
+  contentProbe: { flex: 1, width: '100%', height: '100%' },
+  pagerFrame: { position: 'absolute', left: 0, right: 0, direction: 'ltr' },
+  pagerFrameFill: { top: 0, bottom: 0 },
+  unresolved: { opacity: 0 },
   collapsibleHeader: {
     position: 'absolute',
     left: 0,

@@ -1,6 +1,6 @@
 # Header scroll momentum
 
-Header and tab-bar touches are outside the active native scroll view. The shared vertical pan therefore drives that view with UI-thread `scrollTo` calls. This applies to every adapter, including the Lab's default FlatList.
+Header and tab-bar touches are outside the active native scroll view. The shared vertical pan therefore drives that view with UI-thread `scrollTo` calls. This applies to every adapter, including the Lab's default FlatList, except on iOS with [native header scroll](./IOS-NATIVE-HEADER-SCROLL.md) registered, where header drags use the list's own UIKit pan and none of this model runs.
 
 ## September 15 correction
 

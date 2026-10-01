@@ -3,6 +3,7 @@ import ExpoModulesCore
 final class FluidTabsNativeScrollHost: ExpoView {
   var activePageIndex = 0
   var paging = false
+  var headerScrollEnabled = true
   private(set) lazy var coordinator = FTNSScrollCoordinator(host: self)
 
   required init(appContext: AppContext? = nil) {
@@ -12,7 +13,7 @@ final class FluidTabsNativeScrollHost: ExpoView {
   }
 
   func applyConfiguration() {
-    coordinator.update(activePageIndex: activePageIndex, paging: paging)
+    coordinator.update(activePageIndex: activePageIndex, paging: paging, enabled: headerScrollEnabled)
   }
 
   override func didMoveToWindow() {

@@ -51,7 +51,7 @@ This library targets **Gesture Handler 3**, **Reanimated 4.4+**, and React Nativ
 | `@legendapp/list` (optional) | `>= 3.2.0` |
 | `@shopify/flash-list` (optional) | `>= 2.0.0` |
 
-The example uses Expo 57, React Native 0.86.3, Gesture Handler 3.2.1, Reanimated 4.6.0, and Worklets 0.12.1. Reanimated 4.4 supports the Worklets 0.9 and 0.10 families; 4.6 requires the 0.12 family. Do not pair the minimum Worklets version with Reanimated 4.6.
+The example uses Expo 57, React Native 0.86.3, Gesture Handler 3.2.1, Reanimated 4.6.0, and Worklets 0.12.1. Reanimated 4.4 supports the Worklets 0.9 and 0.10 families; 4.6 requires the 0.12 family. Do not pair the minimum Worklets version with Reanimated 4.6. Reanimated 4.7 requires the Worklets 0.13 family and React Native 0.86 or newer.
 
 ### Setup
 
@@ -94,7 +94,7 @@ module.exports = {
 }
 ```
 
-Both flags remain supported and default to `false` in Reanimated 4.6. They provide a faster path for transforms and other non-layout styles. Run pods on iOS and rebuild native after changing them. They can affect hit testing on transformed views; use Gesture Handler's `Pressable` or gestures for interactive header content, and verify scrolling and taps on your target devices. See the [feature flag documentation](https://docs.swmansion.com/react-native-reanimated/docs/guides/feature-flags/).
+Both flags remain supported and default to `false` in Reanimated 4.6 and 4.7. They apply an animated view's update directly, without a React commit, only when every prop in that update is non-layout, such as `transform` or `opacity`; a view that also animates a layout prop like `width` still commits. Run pods on iOS and rebuild native after changing them. They can affect hit testing on transformed views; use Gesture Handler's `Pressable` or gestures for interactive header content, and verify scrolling and taps on your target devices. See the [feature flag documentation](https://docs.swmansion.com/react-native-reanimated/docs/guides/feature-flags/).
 
 The example leaves other flags at their installed defaults. Check your exact Reanimated release before applying older performance recipes; the [4.6.0 flag definitions](https://github.com/software-mansion/react-native-reanimated/blob/4.6.0/packages/react-native-reanimated/src/featureFlags/staticFlags.json) are the reference for this example. Static flags cannot be changed in **Expo Go**.
 
@@ -104,7 +104,7 @@ The example leaves other flags at their installed defaults. Check your exact Rea
 
 ## Quick start
 
-See the [complete, core-only example in the README](../README.md#quick-start).
+See the [README quick start](../README.md#quick-start).
 
 ## Example playground
 
@@ -178,7 +178,7 @@ Omitting `renderPinnedHeader` removes the fixed header, but still reserves the t
 | `swipeFailDistance` | `number` | `10` | Minimum vertical travel (dp) before a clearly vertical drag yields to scrolling. |
 | `swipeDirectionRatio` | `number` | `1.4` | Required dominance of one axis over the other; values below `1` are clamped to `1`. Ambiguous diagonals yield to scrolling after twice the larger activation distance. |
 | `momentumSwipeFailDistance` | `number` | — | Deprecated and ignored. Direction recognition uses the same distances and ratio during momentum as at rest. |
-| `headerScrollEnabled` | `boolean` | `true` | Allow vertical list scrolling from the collapsible header and tab bar. Honors the active list's `scrollEnabled`; excludes the pinned header. |
+| `headerScrollEnabled` | `boolean` | `true` | Allow vertical list scrolling from the collapsible header and tab bar. Honors the active list's `scrollEnabled`; touch drags on the pinned header are excluded. With iOS native header scroll, `false` hands the pan back to the list once no finger is down. |
 | `swipeGestureTopInset` | `'auto' \| number` | `'auto'` | Top area where the pager swipe won't activate. `'auto'` follows the currently visible chrome as the header collapses or stretches. A number reserves a fixed area; pass `0` for full-height swipes. |
 | `springConfig` | `SpringConfig` | `damping 30, stiffness 200` | Spring used to settle the pager after a swipe. |
 | `pullDownBehavior` | `'stretch' \| 'static'` | `'static'` | `'static'`: chrome stays put, native refresh between header and list. `'stretch'`: page pulls down with the refresh indicator near the top (Android uses a built-in indicator — see [Notes](#notes)). |
@@ -192,7 +192,7 @@ Omitting `renderPinnedHeader` removes the fixed header, but still reserves the t
 | `minPageContentHeight` | `number` | container + header height | Minimum content height per page, so short/empty pages can still scroll enough to collapse the header. Uses the measured container and header. |
 | `containerStyle` | `StyleProp<ViewStyle>` | — | Style for the outermost view. Set a `backgroundColor` — see [Notes](#notes). |
 
-When a newly visited lazy page mounts, its list aligns to the intended header offset once its ref and layout/content measurements are ready. The applied offset is clamped to that list's scrollable range.
+Pages align to the intended header offset once their ref and layout/content measurements are ready, including a newly visited lazy page. The applied offset is clamped to each list's scrollable range. The page you leave stops coasting where it is; on iOS, a list bouncing past its bottom finishes the bounce.
 
 #### Gesture recognition and header dragging
 
@@ -200,7 +200,9 @@ The pager and vertical gesture use the same direction rule on UI. Once selected,
 
 Dragging vertically on the collapsible header or tab bar scrolls the actual active list, including when the finger reverses direction. Scrolling begins from the gesture's activation position. The default tab buttons wait for that gesture to fail before selecting a tab. Bounds come from each adapter's layout/content measurements; release momentum follows an elapsed-time trajectory using the list's `decelerationRate`, with separate iOS and Android models. Another drag or navigation interrupts it. These programmatic movements emit scroll updates; native `onScrollBeginDrag` and momentum callbacks remain tied to native list gestures. See [header momentum](./HEADER-SCROLL-MOMENTUM.md) for the model and its limits.
 
-In Android `stretch` mode, a drag from the header/tab bar can cross the list's top into a custom pull and return to normal scrolling in the same touch. In native refresh modes, a chrome drag stops at the top: start pull-to-refresh on the list itself to use its native refresh control and haptics. Setting `headerScrollEnabled={false}` disables normal list scrolling from chrome; Android's existing stretched pull from chrome remains available.
+With [iOS native header scroll](./IOS-NATIVE-HEADER-SCROLL.md) registered, a drag on the collapsible header or tab bar is the active list's own UIKit pan instead of this JavaScript model. It gets native momentum, overscroll and bounce, can pull the native refresh control, and fires the list's `onScrollBeginDrag` and momentum callbacks. Drags that start anywhere in the pinned area, including the reserved safe-area inset, still don't scroll the list.
+
+In Android `stretch` mode, a drag from the header/tab bar can cross the list's top into a custom pull and return to normal scrolling in the same touch. Without iOS native header scroll, a chrome drag in native refresh modes stops at the top: start pull-to-refresh on the list itself to use its native refresh control and haptics. Setting `headerScrollEnabled={false}` disables normal list scrolling from chrome; Android's existing stretched pull from chrome remains available.
 
 #### Imperative ref
 
@@ -328,10 +330,11 @@ Android stretch mode replaces the native control with a built-in indicator. It r
 - **Typed context fields.** `useTabsContext()` now types `scrollHandlers`, `listNativeGestures`, `pagerPanGesture` and `pullPanGesture` instead of `any`.
 - **`Tabs.FlatList` rejects `CellRendererComponent`** at compile time. Reanimated's `Animated.FlatList` always replaced it, so it never took effect.
 - **iOS refresh shorthand** creates React Native's `RefreshControl` instead of Gesture Handler's (experimental).
+- **Pages match the pager's visible width.** With horizontal padding or borders on `containerStyle`, each page used to be as wide as the whole container, so its far edge was clipped. Pages, swipes and `setIndex` now use the width inside the padding and borders.
 
 ## Web
 
-Supported on `react-native-web`. Web scroll handlers run in the browser. The default tab bar supports pointer and keyboard activation. Inactive pages stay mounted but are hidden from accessibility; web pages also use `inert` to exclude their controls from keyboard focus. Verify touch scrolling, horizontal swiping, and focus behavior in the browsers you support. Native frame pacing requires separate device profiling.
+Supported on `react-native-web`. Web scroll handlers run in the browser. A vertical mouse wheel over the header, tab bar or pinned header scrolls the active list while `headerScrollEnabled` is true, unless it lands on a scrollable area of its own; the pinned-header exclusion covers touch drags only. The default tab bar supports pointer and keyboard activation. Inactive pages stay mounted but are hidden from accessibility; web pages also use `inert` to exclude their controls from keyboard focus. Verify touch scrolling, horizontal swiping, and focus behavior in the browsers you support. Native frame pacing requires separate device profiling.
 
 The stock Gesture Handler `RefreshControl` has no refresh UI on web and its gesture wrapper can intercept pager drags, so the adapters omit it there. Custom web refresh controls are forwarded; their gesture relationships remain the caller's responsibility.
 

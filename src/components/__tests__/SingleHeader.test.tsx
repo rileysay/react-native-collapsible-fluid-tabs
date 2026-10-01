@@ -45,6 +45,7 @@ jest.mock('react-native-reanimated', () => ({
 
 const hostProps: Record<string, unknown>[] = [];
 const pageProps: Record<string, unknown>[] = [];
+let pageMounts = 0;
 
 function Host(props: NativeHeaderScrollHostProps) {
   hostProps.push(props);
@@ -53,6 +54,9 @@ function Host(props: NativeHeaderScrollHostProps) {
 
 function Page(props: NativeHeaderScrollPageProps) {
   pageProps.push(props);
+  useEffect(() => {
+    pageMounts += 1;
+  }, []);
   return <>{props.children}</>;
 }
 
@@ -64,10 +68,18 @@ const gesture = {} as NativeGesture;
 let root: Root;
 let container: HTMLDivElement;
 
-function renderTree(children: ReactNode, pageIndex = 2) {
+function renderTree(
+  children: ReactNode,
+  pageIndex = 2,
+  headerScrollEnabled = true
+) {
   act(() =>
     root.render(
-      <SingleHeaderHost activeIndex={shared(1.4)} paging={shared(true)}>
+      <SingleHeaderHost
+        activeIndex={shared(1.4)}
+        paging={shared(true)}
+        headerScrollEnabled={headerScrollEnabled}
+      >
         <TabIndexContext.Provider value={pageIndex}>
           {children}
         </TabIndexContext.Provider>
@@ -81,6 +93,7 @@ beforeEach(() => {
   registerNativeHeaderScroll(null);
   hostProps.length = 0;
   pageProps.length = 0;
+  pageMounts = 0;
   container = document.createElement('div');
   root = createRoot(container);
 });
@@ -135,6 +148,28 @@ describe('native header scroll registration', () => {
     registerNativeHeaderScroll(null);
 
     expect(isNativeHeaderScrollEnabled()).toBe(false);
+  });
+});
+
+describe('headerScrollEnabled under native registration', () => {
+  it('passes the setting to the host and keeps pages mounted when toggled', () => {
+    registerNativeHeaderScroll({ Host, Page });
+    const page = (
+      <SingleHeaderPage>
+        <span>list</span>
+      </SingleHeaderPage>
+    );
+    renderTree(page, 0);
+    expect(hostProps.at(-1)).toMatchObject({ headerScrollEnabled: true });
+
+    renderTree(page, 0, false);
+    expect(hostProps.at(-1)).toMatchObject({ headerScrollEnabled: false });
+    renderTree(page, 0, true);
+    expect(hostProps.at(-1)).toMatchObject({ headerScrollEnabled: true });
+
+    // The native host decides when to hand the pan back; React never remounts.
+    expect(pageMounts).toBe(1);
+    expect(container.textContent).toBe('list');
   });
 });
 

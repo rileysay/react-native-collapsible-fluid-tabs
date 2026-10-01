@@ -41,6 +41,7 @@ export function useTabNavigation({
   reduceMotionSV,
   syncLists,
   alignList,
+  stopList,
   perPageScrollY,
   scrollY,
   scrollToTopIndex,
@@ -64,6 +65,7 @@ export function useTabNavigation({
   reduceMotionSV: SharedValue<boolean>;
   syncLists: (excludeIndex?: number) => void;
   alignList: (index: number, target: number) => void;
+  stopList: (index: number, target: number) => boolean;
   perPageScrollY: SharedValue<number>[];
   scrollY: SharedValue<number>;
   scrollToTopIndex: SharedValue<number>;
@@ -97,15 +99,22 @@ export function useTabNavigation({
           target = y.value;
         }
 
-        if (target !== null && (target !== y.value || i === currentIndex)) {
+        if (target === null) continue;
+        if (target !== y.value) {
           alignList(i, target);
+        } else if (i === currentIndex) {
+          // A same-offset scroll is skipped natively, so stop the outgoing
+          // page's momentum explicitly. When the stop declines (overscrolled,
+          // unmeasured or unmounted), the page stays put and UIKit finishes
+          // any bounce, as an unchanged alignment always did.
+          stopList(i, target);
         }
       }
 
       const nextY = perPageScrollY[nextIndex];
       if (nextY) scrollY.value = nextY.value;
     },
-    [alignList, scrollY, headerHeight, listRefs, perPageScrollY]
+    [alignList, stopList, scrollY, headerHeight, listRefs, perPageScrollY]
   );
 
   const goToIndex = useCallback(

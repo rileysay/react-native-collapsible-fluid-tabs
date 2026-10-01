@@ -1,3 +1,8 @@
+# Check out text files with LF on every platform, so lint (Prettier's
+# endOfLine) passes on Windows too. Binary assets stay untouched.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
 *.pbxproj -text
 # specific for windows script files
 *.bat text eol=crlf

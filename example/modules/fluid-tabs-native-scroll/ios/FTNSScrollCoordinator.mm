@@ -68,6 +68,8 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   NSInteger _requestedIndex;
   NSInteger _committedIndex;
   BOOL _paging;
+  // Mirrors the container's headerScrollEnabled: false keeps the pan on its list.
+  BOOL _enabled;
   BOOL _attached;
   BOOL _backgrounded;
   BOOL _reconcileScheduled;
@@ -85,6 +87,7 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
     _stopCheckedTouches = [NSHashTable weakObjectsHashTable];
     _requestedIndex = 0;
     _committedIndex = NSNotFound;
+    _enabled = YES;
     _pointers = [[FTNSPointerObserver alloc] initWithTarget:nil action:NULL];
     __weak FTNSScrollCoordinator *weakSelf = self;
     _pointers.streamChanged = ^(NSSet<UITouch *> *newTouches, NSUInteger count) {
@@ -118,11 +121,12 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   if (_host) RNGHExternalScrollSetViewOwner(_host, nil);
 }
 
-- (void)updateActivePageIndex:(NSInteger)index paging:(BOOL)paging
+- (void)updateActivePageIndex:(NSInteger)index paging:(BOOL)paging enabled:(BOOL)enabled
 {
   NSAssert(NSThread.isMainThread, @"Native scroll props must commit on the main thread");
   _requestedIndex = MAX(0, index);
   _paging = paging;
+  _enabled = enabled;
   [self reconcile];
 }
 
@@ -216,6 +220,13 @@ static BOOL RecognizerHasActiveDrag(UIGestureRecognizer *recognizer)
   }
   if (_paging || _pointers.pointerCount != 0 || RecognizerHasActiveDrag(_owner.panGestureRecognizer) ||
       RecognizerHasActiveDrag(_ownerHandler.recognizer)) return;
+  if (!_enabled) {
+    // Header scrolling is off: return the pan to its list once the stream is
+    // idle (the gate above), without cancelling touches, and never attach.
+    // Pages stay registered, so re-enabling attaches on the next reconcile.
+    if (_owner) [self restoreOwner:NO];
+    return;
+  }
   FTNSPageRegistration *next = _pages[@(_requestedIndex)];
   if (!next.scrollView || !next.page.window || ![next.page isDescendantOfView:_host]) return;
   if (next.scrollView == _owner && _committedIndex == _requestedIndex) return;

@@ -193,51 +193,74 @@ export function usePagerListState({
     (index: number, target: number) => {
       'worklet';
       const pending = pendingScrollY[index]!;
+      const metrics = listScrollMetrics[index]?.value;
+      const measured =
+        !!metrics && metrics.viewportHeight > 0 && metrics.contentHeight > 0;
+      // Same readiness and range policy as a lazily mounted page: a list whose
+      // geometry is known takes a clamped offset now, and any other list keeps
+      // the logical offset pending until it is mounted and measured.
+      const applied = measured
+        ? Math.min(
+            target,
+            Math.max(0, metrics.contentHeight - metrics.viewportHeight)
+          )
+        : target;
       if (
         pending.value !== null ||
+        !measured ||
         !scrollToMountedRef(
           listRefs[index],
           listMounted[index],
           0,
-          target,
+          applied,
           false
         )
       ) {
         pending.value = target;
+        // Unmounted pages still need a logical offset: navigation reads it
+        // before React mounts the page and its native list becomes measurable.
+        perPageScrollY[index]!.value = target;
+        return;
       }
-      // Unmounted pages still need a logical offset: navigation reads it
-      // before React mounts the page and its native list becomes measurable.
-      perPageScrollY[index]!.value = target;
+      perPageScrollY[index]!.value = applied;
     },
-    [listRefs, listMounted, pendingScrollY, perPageScrollY]
+    [listRefs, listMounted, listScrollMetrics, pendingScrollY, perPageScrollY]
+  );
+
+  // Stop a page's native momentum at `target`. iOS skips a scroll to the
+  // current offset, so a same-offset alignment alone would not stop it.
+  const stopList = useCallback(
+    (index: number, target: number) => {
+      'worklet';
+      const ref = listRefs[index];
+      const y = perPageScrollY[index];
+      if (!ref || !y) return false;
+      const metrics = listScrollMetrics[index]?.value;
+      const maxOffset =
+        metrics && metrics.viewportHeight > 0
+          ? Math.max(0, metrics.contentHeight - metrics.viewportHeight)
+          : 0;
+      if (!stopScrollAtOffset(ref, listMounted[index], target, maxOffset)) {
+        return false;
+      }
+      y.value = target;
+      return true;
+    },
+    [listRefs, listMounted, listScrollMetrics, perPageScrollY]
   );
 
   // Interrupt native momentum before synchronizing pages for a swipe.
   const freezeLists = useCallback(() => {
     'worklet';
     for (let i = 0; i < listRefs.length; i++) {
-      const ref = listRefs[i];
       const y = perPageScrollY[i];
-      if (!ref || !y) continue;
-      const target =
-        scrollToTopIndex.value === i ? scrollToTopOffset.value : y.value;
-      const metrics = listScrollMetrics[i]?.value;
-      const maxOffset =
-        metrics && metrics.viewportHeight > 0
-          ? Math.max(0, metrics.contentHeight - metrics.viewportHeight)
-          : 0;
-      if (stopScrollAtOffset(ref, listMounted[i], target, maxOffset)) {
-        y.value = target;
-      }
+      if (!listRefs[i] || !y) continue;
+      stopList(
+        i,
+        scrollToTopIndex.value === i ? scrollToTopOffset.value : y.value
+      );
     }
-  }, [
-    listRefs,
-    listMounted,
-    listScrollMetrics,
-    perPageScrollY,
-    scrollToTopIndex,
-    scrollToTopOffset,
-  ]);
+  }, [listRefs, perPageScrollY, scrollToTopIndex, scrollToTopOffset, stopList]);
 
   const cancelScrollToTop = useCallback(() => {
     'worklet';
@@ -305,6 +328,7 @@ export function usePagerListState({
     scrollToTopOffset,
     scrollHandlers,
     freezeLists,
+    stopList,
     cancelScrollToTop,
     syncLists,
     alignList,

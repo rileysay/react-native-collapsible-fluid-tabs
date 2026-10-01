@@ -28,6 +28,8 @@ import { useTabIndex } from '../context';
 export type NativeHeaderScrollHostProps = ViewProps & {
   activePageIndex: number;
   paging: boolean;
+  /** False hands the pan back to the active list, once no finger is down. */
+  headerScrollEnabled?: boolean;
 };
 export type NativeHeaderScrollPageProps = ViewProps & { pageIndex: number };
 
@@ -81,6 +83,7 @@ const pageStyle = { flex: 1 } as const;
 type SingleHeaderHostProps = ViewProps & {
   activeIndex: SharedValue<number>;
   paging: SharedValue<boolean>;
+  headerScrollEnabled: boolean;
 };
 type HostRef = React.ComponentRef<typeof View>;
 
@@ -105,11 +108,20 @@ export function SingleHeaderHost({
   ref,
   activeIndex,
   paging,
+  headerScrollEnabled,
   ...props
 }: SingleHeaderHostProps & { ref?: Ref<HostRef> }) {
   if (!isNativeHeaderScrollEnabled()) return <View {...props} ref={ref} />;
-  // The container's root ref is only read by its web scroll listener.
-  return <NativeHost {...props} activeIndex={activeIndex} paging={paging} />;
+  // The container's root ref is only read by its web scroll listener. The
+  // host stays mounted when header scrolling is toggled, so pages keep state.
+  return (
+    <NativeHost
+      {...props}
+      activeIndex={activeIndex}
+      paging={paging}
+      headerScrollEnabled={headerScrollEnabled}
+    />
+  );
 }
 
 /** Registers one list's native scroll view with the host. */
