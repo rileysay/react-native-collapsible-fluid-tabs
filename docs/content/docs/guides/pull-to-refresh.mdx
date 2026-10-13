@@ -67,4 +67,6 @@ On Android, the list defaults to `overScrollMode="never"` so platform stretch do
 
 The stock Gesture Handler refresh control has no refresh UI on web and is omitted there. The website examples add a browser-only simulation of Static and Stretch using the demo refresh state. This simulation is not included in the published package. Read [web support](/docs/guides/web).
 
-iOS uses a default system tint; an explicit `tintColor` takes precedence. The example also includes an experimental native tint/haptic patch that still needs physical-device verification. Installing this library does not apply that native patch to your app. See [the native refresh notes](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/docs/IOS_REFRESH_CONTROL.md).
+iOS uses a default system tint; an explicit `tintColor` takes precedence.
+
+The repository's example includes an experimental [React Native 0.86.3 refresh patch](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/.yarn/patches/react-native-npm-0.86.3-a26c4d71a9.patch). Testing it requires rebuilding the iOS client. Installing this library does not apply that native patch to your app.

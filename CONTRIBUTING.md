@@ -12,7 +12,9 @@ yarn example start
 
 The [example app](./example/README.md) uses the library's local source. Open an Expo development client, or run `yarn example web` for the browser preview.
 
-To build a native client locally, run `yarn example android` with the Android SDK installed, or `yarn example ios` on macOS with Xcode and CocoaPods. Rebuild after changing native dependencies, native patches, or Reanimated static flags. See the [iOS refresh patch notes](./docs/IOS_REFRESH_CONTROL.md) when working on refresh behavior.
+To build a native client locally, run `yarn example android` with the Android SDK installed, or `yarn example ios` on macOS with Xcode and CocoaPods. Rebuild after changing native dependencies, native patches, or Reanimated static flags.
+
+The example's experimental [iOS refresh patch](./.yarn/patches/react-native-npm-0.86.3-a26c4d71a9.patch) is applied by the Yarn resolution. Keep `buildReactNativeFromSource` enabled in [example/app.json](./example/app.json) so the iOS build uses that patched source. Reloading Metro does not update native code.
 
 ## Check changes
 

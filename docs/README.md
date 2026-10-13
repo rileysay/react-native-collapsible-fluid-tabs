@@ -96,8 +96,6 @@ The existing `fluid-tabs` Vercel project connects to this GitHub repository:
 
 Pull requests get preview deployments. Merged changes deploy to [fluid-tabs.vercel.app](https://fluid-tabs.vercel.app); this does not publish an npm release. The project retains its domain and Vercel Analytics history.
 
-The files `REFERENCE.md`, `IOS_REFRESH_CONTROL.md`, `HEADER-SCROLL-MOMENTUM.md`, and `readme-banner.png` are existing repository references/assets; the live website’s pages are under `content/docs/`.
-
 After connecting a custom domain, set `SITE_URL` to its full HTTPS URL and redeploy. Otherwise metadata uses Vercel’s production project URL.
 
 ## Visual sources

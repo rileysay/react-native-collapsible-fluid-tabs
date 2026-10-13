@@ -1,7 +1,8 @@
 // Android's OverScroller uses a cubic spline and friction, whereas iOS's
 // decelerationRate describes exponential velocity loss per millisecond.
 // These rates cannot be passed interchangeably to Reanimated's withDecay.
-// Model references: docs/HEADER-SCROLL-MOMENTUM.md.
+// Android model: https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/widget/OverScroller.java
+// iOS model: https://developer.apple.com/videos/play/wwdc2018/803/
 const ANDROID_INFLECTION = 0.35;
 const ANDROID_EXPONENT = Math.log(0.78) / Math.log(0.9);
 // OverScroller's physical coefficient in density-independent units. Density
