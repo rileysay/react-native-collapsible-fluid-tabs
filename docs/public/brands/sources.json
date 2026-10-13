@@ -1,0 +1,56 @@
+[
+  {
+    "sha256": "40d6f225dea88cb2a8d9be5abf8db1466a4afd206c074615619e6eacbc896a36",
+    "name": "github",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "url": "https://cdn.reicon.dev/logos/github/original.svg"
+  },
+  {
+    "sha256": "105e9b75bf30e308a48de256aec22ab24142a00c87d652a8654391c5e043427c",
+    "name": "react",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "url": "https://cdn.reicon.dev/logos/react/original.svg"
+  },
+  {
+    "sha256": "29d68882360f81217245caf7676b53b010bae196b045d2be2be71264f10ac762",
+    "name": "expo",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "url": "https://cdn.reicon.dev/logos/expo/original.svg"
+  },
+  {
+    "sha256": "8fe7a9b3c30d7c44a4b7a431d6f943e30e374d8bde032d83377f2ab4e6a34544",
+    "name": "npm",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "url": "https://cdn.reicon.dev/logos/npm/original.svg"
+  },
+  {
+    "name": "x",
+    "url": "https://cdn.reicon.dev/logos/x/original.svg",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "sha256": "07099f0e2eea46fe8cef6a2422dee63e1aa98c3cab07f3edf9a0b333314f758b"
+  },
+  {
+    "name": "shopify",
+    "url": "https://cdn.reicon.dev/logos/shopify/original.svg",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "sha256": "08f018a46bc69784cde9c1039a49568f384277c8b36fdbb982a1f44a072c4767"
+  },
+  {
+    "name": "legend",
+    "url": "https://legendapp.com/img/Logomark_(White).svg",
+    "sourcePage": "https://legendapp.com/",
+    "sha256": "28b12d795e3fffce275113a74f9090d47bab2ec2c3dd76820e232c3d5fcae1ec"
+  },
+  {
+    "name": "software-mansion",
+    "url": "https://brand.swmansion.com/logos/products/swmansion/swmansion-symbol-mono-left-top-on-light.svg",
+    "sourcePage": "https://brand.swmansion.com/",
+    "sha256": "a3c86ec047fa347afce66b8144358bc9912acbdf186c90d9740d74b9ccda7bf3"
+  },
+  {
+    "name": "instagram",
+    "url": "https://cdn.reicon.dev/logos/instagram/original.svg",
+    "catalogCommit": "62511d9b07f91be25801a8a014323b9e5e331a09",
+    "sha256": "821d3a84a192e97a1744a140afd871e8a81d8f7b81fdc33cbf54e74f09ee6143"
+  }
+]

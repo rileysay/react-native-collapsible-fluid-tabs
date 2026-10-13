@@ -1,0 +1,36 @@
+---
+title: Web support
+description: Use Fluid Tabs on React Native Web, with platform behavior in mind.
+---
+
+Fluid Tabs supports React Native Web. Scroll handlers run in the browser. `Tabs.LegendList` fills its page to provide a bounded scroller; without a bounded height, a list can expand with its content instead of scrolling internally. See [list adapters](/docs/guides/list-adapters).
+
+## Try the web example
+
+Visit [the examples page](/examples) or [open the full web demo](/demo). The home screen opens the X, Instagram, and Lab examples.
+
+Use the mouse wheel, a vertical left-button drag, or touch to scroll the list. Horizontal mouse drags and touch swipes can change pages when `swipeEnabled` is enabled. Mouse dragging leaves text inputs and nested scrollable controls to their own interactions.
+
+Coarse wheel steps are smoothed so the list and header move together; fine trackpad deltas are applied directly. Wheel input at the list's top or bottom is left to normal browser scroll chaining, so an enclosing page may scroll there.
+
+## Focus and accessibility
+
+The default tab bar is focusable with Tab and activates with Enter or Space through Gesture Handler's web tap recognizer. It does not implement arrow-key navigation between tabs.
+
+Mounted inactive pages are hidden from accessibility and use `inert` to exclude their controls from keyboard focus. With `lazy`, unvisited pages outside the preload range have no mounted content yet.
+
+Test tab focus, touch scrolling, and horizontal gestures in the browsers you support. Reduced-motion preferences make tab navigation jump immediately.
+
+## Refresh controls
+
+Gesture Handler's stock `RefreshControl` has no web refresh UI. Its wrapper can intercept pager drags, so the adapters omit it on web. The adapters' `onRefresh` / `refreshing` shorthand therefore does not provide a web pull-to-refresh gesture.
+
+The website's X, Instagram, and Lab examples add a browser-only refresh demonstration. At the top of a list, drag down with a mouse or finger and release to refresh. Static mode keeps the header and tabs fixed; Stretch moves the collapsing header, tabs, and list together while the pinned header stays fixed. The spinner uses the example's 1.5-second refresh state. The Lab's Refresh button can also trigger it at the top.
+
+This presentation belongs to the example app, not the published package. It illustrates the modes; use a native device to check native bounce and refresh indicators.
+
+Custom web refresh controls are forwarded, and their gesture relationships remain the caller's responsibility.
+
+## Test native motion on native devices
+
+A browser preview helps demonstrate layout and navigation. Native frame pacing, bounce, and refresh indicators require separate iOS and Android testing.

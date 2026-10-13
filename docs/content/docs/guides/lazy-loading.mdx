@@ -1,0 +1,30 @@
+---
+title: Lazy pages
+description: Mount pages as they become useful, and keep visited state around.
+---
+
+Pages mount immediately by default. Enable `lazy` to mount only the active page and its preload range initially:
+
+```tsx
+<Tabs.Container lazy lazyPreloadDistance={1}>
+  {/* Tabs.Tab pages */}
+</Tabs.Container>
+```
+
+## Preload neighboring pages
+
+`lazyPreloadDistance` defaults to `1`, so adjacent pages can be ready for a swipe. Set it to `0` to avoid preloading neighbors. With no preload, a swipe toward an unvisited page can reveal an empty page until selection changes and its content mounts.
+
+Once a page mounts, it stays mounted for that container's lifetime. Switching away does not discard its local state.
+
+On first visit, the container aligns the new list with the current header state after its scroll view and content have been measured. A partly collapsed header keeps that collapse amount; a fully collapsed header starts the new page at the collapse threshold, subject to its available scroll range.
+
+## Lazy mounting is not list virtualization
+
+Lazy pages control when a tab is mounted. Your list implementation controls how many rows are rendered. Use a virtualized adapter for long content.
+
+## Preserve page identity
+
+Changing tab names, order, or count resets the pager. Keep those stable when preserving state is important.
+
+Measure startup and interaction behavior on your target devices before adjusting preload distance. The best tradeoff depends on the contents of your pages.

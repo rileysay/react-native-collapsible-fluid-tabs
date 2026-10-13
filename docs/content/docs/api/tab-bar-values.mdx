@@ -1,0 +1,172 @@
+---
+title: "Tab bar values"
+description: "The values supplied to your renderTabBar function."
+---
+
+Type: `TabBarRenderProps`. [View library source](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/src/types.ts).
+
+## tabs
+
+Required
+
+```ts
+TabConfig[]
+```
+
+Tab metadata in page order.
+
+## scrollY
+
+Required
+
+```ts
+SharedValue<number>
+```
+
+Active page's mirrored offset; negative values represent overscroll.
+
+## perPageScrollY
+
+Required
+
+```ts
+SharedValue<number>[]
+```
+
+Tracked offsets for each page. Custom chrome should also account for
+`scrollToTopOffset` during re-taps and negative `scrollY` during a stretched pull.
+
+## scrollToTopIndex
+
+Optional
+
+```ts
+SharedValue<number>
+```
+
+Active during same-tab scroll-to-top so header chrome can follow the
+UI-thread driven target instead of waiting on native scroll events.
+
+## scrollToTopOffset
+
+Optional
+
+```ts
+SharedValue<number>
+```
+
+Animated offset to read while `scrollToTopIndex` matches the active page.
+
+## tabCount
+
+Required
+
+```ts
+number
+```
+
+Number of pages.
+
+## headerHeight
+
+Required
+
+```ts
+SharedValue<number>
+```
+
+Collapsible header height, initially estimated and then measured.
+
+## activeIndex
+
+Required
+
+```ts
+SharedValue<number>
+```
+
+Selected target index; changes before a paging animation finishes.
+
+## pagerOffset
+
+Required
+
+```ts
+DerivedValue<number>
+```
+
+Fractional visual page position, clamped to the first and last pages.
+
+## pillWidth
+
+Required
+
+```ts
+SharedValue<number>
+```
+
+Width of one equal-width tab slot, measured by the default tab bar.
+
+## pinnedHeaderHeight
+
+Required
+
+```ts
+number
+```
+
+Pinned header height, excluding `topInset`.
+
+## tabBarHeight
+
+Required
+
+```ts
+number
+```
+
+Reserved tab bar height. Custom tab bars should fit this height.
+
+## topInset
+
+Required
+
+```ts
+number
+```
+
+Reserved top inset.
+
+## minHeaderHeight
+
+Required
+
+```ts
+number
+```
+
+Minimum visible height of the collapsible header once chrome collapse finishes.
+
+> **Unreleased:** this value is merged into `main` and is not included in npm `1.5.1`.
+
+See [retaining part of the header](/docs/guides/headers#keep-part-of-the-header-visible) for the layout and custom tab-bar behavior.
+
+## pullDownBehavior
+
+Required
+
+```ts
+PullDownBehavior
+```
+
+Chrome behavior while the list is pulled below its start.
+
+## onTabPress
+
+Required
+
+```ts
+(index: number) => void
+```
+
+Select a page, or scroll the selected page to its top when enabled.

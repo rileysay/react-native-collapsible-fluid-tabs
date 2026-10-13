@@ -1,0 +1,4 @@
+{
+  "title": "Documentation",
+  "pages": ["---Start here---", "index", "installation", "quick-start", "---Build your screen---", "guides", "---Reference---", "api", "troubleshooting"]
+}

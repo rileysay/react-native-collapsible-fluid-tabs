@@ -1,0 +1,132 @@
+.art { isolation: isolate; }
+.device {
+  position: absolute;
+  top: 23px;
+  left: 50%;
+  width: min(238px, calc(100% - 44px));
+  height: 206px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 10px 10px 0 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.sequence { position: relative; height: 100%; }
+.header { height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 12px; }
+.header > i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); opacity: .55; }
+.header > span { height: 3px; width: 42px; border-radius: 3px; background: var(--muted); opacity: .4; }
+.header > b { margin-left: auto; height: 3px; width: 12px; border-radius: 3px; background: var(--muted); opacity: .3; }
+.tabs {
+  height: 27px;
+  margin: 0 8px 8px;
+  padding: 3px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  border-radius: 7px;
+  background: var(--wash);
+}
+.tabs > span { position: relative; text-align: center; font-size: 9px; line-height: 1; color: var(--ink); }
+.pill { position: absolute; inset: 3px auto 3px 3px; width: calc((100% - 6px) / 2); border-radius: 5px; background: var(--art-surface); box-shadow: 0 1px 3px #0000000a; }
+.viewport { height: 145px; overflow: hidden; border-top: 1px solid var(--line); }
+.pages { display: flex; width: 100%; height: 100%; }
+.page { flex: 0 0 100%; min-width: 0; overflow: hidden; }
+.feed { padding: 0 10px; }
+.row { height: 38px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+.row > i { flex: 0 0 15px; height: 15px; border-radius: 50%; background: var(--art-surface); }
+.row > div { display: flex; flex: 1; flex-direction: column; gap: 5px; }
+.row span { height: 3px; border-radius: 3px; background: var(--muted); opacity: .32; width: 80%; }
+.row span + span { width: 55%; opacity: .16; }
+.row > b { width: 24px; height: 24px; background: var(--art-surface); border-radius: 4px; }
+.row:nth-child(3n + 1) > i { background: var(--muted); opacity: .55; }
+.row:nth-child(3n + 2) span:first-child { width: 58%; }
+.row:nth-child(3n + 2) > b { opacity: .3; }
+.gallery { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 42px; gap: 6px; padding: 10px; }
+.gallery > i { position: relative; overflow: hidden; background: var(--art-surface); border-radius: 4px; }
+.gallery > i::after { content: ''; position: absolute; inset: 15px -5px -18px 10px; transform: rotate(-30deg); background: var(--muted); opacity: .22; border-radius: 4px; }
+.gallery > i:nth-child(3n + 2) { background: color-mix(in srgb, var(--muted) 24%, var(--surface)); }
+.gallery > i:nth-child(2n)::after { transform: rotate(35deg); opacity: .35; }
+.swipeTrail {
+  position: absolute;
+  left: calc(30% + 8px);
+  top: 112px;
+  width: 44%;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--ink), transparent);
+  transform-origin: right center;
+  pointer-events: none;
+  opacity: 0;
+}
+.touchTrack { position: absolute; inset: 0; pointer-events: none; }
+.touch { position: absolute; left: 74%; top: 105px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); box-shadow: 0 1px 7px #00000030; opacity: 0; }
+.touch > i { position: absolute; inset: -6px; border: 1px solid var(--ink); border-radius: 50%; opacity: 0; }
+
+/* The sideways drag starts in the same frame that vertical momentum stops. */
+.sequence, .feed, .pages, .pill, .swipeTrail, .touchTrack, .touch, .touch > i {
+  animation-duration: 3.2s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-play-state: paused;
+}
+.art[data-running=true] :is(.sequence, .feed, .pages, .pill, .swipeTrail, .touchTrack, .touch, .touch > i) { animation-play-state: running; }
+.sequence { animation-name: reset; }
+.feed { animation-name: coast; }
+.pages { animation-name: page; }
+.pill { animation-name: tab; }
+.swipeTrail { animation-name: trail; }
+.touchTrack { animation-name: drag; }
+.touch { animation-name: touch; }
+.touch > i { animation-name: contact; }
+
+@keyframes coast {
+  0%, 6% { transform: translateY(0); }
+  12% { transform: translateY(-88px); }
+  18% { transform: translateY(-162px); }
+  24%, 95% { transform: translateY(-228px); }
+  100% { transform: translateY(0); }
+}
+@keyframes page {
+  0%, 24% { transform: translateX(0); }
+  31% { transform: translateX(-44%); animation-timing-function: var(--ease-out); }
+  40%, 95% { transform: translateX(-100%); }
+  100% { transform: translateX(0); }
+}
+@keyframes tab {
+  0%, 24% { transform: translateX(0); }
+  31% { transform: translateX(44%); animation-timing-function: var(--ease-out); }
+  40%, 95% { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+@keyframes touch {
+  0%, 23% { opacity: 0; }
+  24%, 31% { opacity: 1; }
+  34%, 100% { opacity: 0; }
+}
+@keyframes drag {
+  0%, 24% { transform: translateX(0); }
+  31%, 100% { transform: translateX(-44%); }
+}
+@keyframes contact {
+  0%, 23% { opacity: 0; transform: scale(1); }
+  24% { opacity: .35; transform: scale(1); }
+  29%, 100% { opacity: 0; transform: scale(1.2); }
+}
+@keyframes trail {
+  0%, 24% { opacity: 0; transform: scaleX(.01); }
+  25% { opacity: .65; transform: scaleX(.143); }
+  31% { opacity: .65; transform: scaleX(1); }
+  36%, 100% { opacity: 0; transform: scaleX(1); }
+}
+@keyframes reset {
+  0% { opacity: 0; }
+  6%, 86% { opacity: 1; }
+  94%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .art :is(.sequence, .feed, .pages, .pill, .swipeTrail, .touchTrack, .touch, .touch > i) { animation: none; }
+  .sequence { opacity: 1; }
+  .feed { transform: translateY(-38px); }
+  .swipeTrail, .touch { display: none; }
+}

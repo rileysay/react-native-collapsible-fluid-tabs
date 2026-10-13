@@ -1,0 +1,80 @@
+---
+title: Custom tab bars
+description: Start with the fluid pill, or create something of your own.
+---
+
+## Style the default
+
+The default bar renders automatically. Use `renderTabBar` when you want to customize it:
+
+```tsx
+renderTabBar={(props) => (
+  <Tabs.DefaultTabBar
+    {...props}
+    colors={{
+      background: '#fff',
+      trackBackground: '#ebebeb',
+      pillBackground: '#fff',
+      labelColor: '#262626',
+      iconTint: '#262626',
+      badgeBackground: '#262626',
+      badgeText: '#fff',
+    }}
+    sidePadding={16}
+  />
+)}
+```
+
+Both active and inactive labels use `labelColor`, with opacity handling the inactive state. Keep that color readable against your track and pill.
+
+## Let the tabs adapt
+
+With `scrollable="auto"`, tabs use equal widths while there is enough room. When they would become narrower than `minTabWidth`, the bar changes to a horizontally scrollable, content-width layout.
+
+`minTabWidth` defaults to `88`. Set `scrollable` to `true` or `false` to force a layout.
+
+## Labels, icons, and badges
+
+Pass `label`, `icon`, and `badge` to `Tabs.Tab`. A string or number badge displays its text in a bubble; `true` displays a dot, and `false` hides it. Your custom bar receives these values in the tab configuration.
+
+Without an icon, the default bar falls back to the tab's `name` when no label is supplied. With an icon, omit `label` for an icon-only tab; its accessible label still uses the name. Icon elements receive `color` and `tintColor` from `iconTint`, so the icon component must accept one of those props for tinting to work.
+
+## Build a custom bar
+
+`renderTabBar` receives [TabBarRenderProps](/docs/api/tab-bar-values), including:
+
+- `tabs`: the page configurations.
+- `activeIndex` and `pagerOffset`: live selection and swipe progress.
+- `onTabPress`: the container's navigation callback.
+- `perPageScrollY` and `headerHeight`: values for coordinated collapse motion.
+- `minHeaderHeight`: the effective retained header height, clamped to the measured header (merged into `main`; not in npm `1.5.1`).
+
+Use Reanimated's `useAnimatedStyle` in a dedicated component to read shared values. A custom bar is responsible for its own positioning: start below the pinned header and top inset, then translate it by the visible collapsing-header height.
+
+For header motion, read the active page's entry in `perPageScrollY`. In Android stretch mode, a negative `scrollY` represents the custom pull while the actual list stays at the top; account for that value when moving your bar with the pull.
+
+During same-tab scroll-to-top, `scrollToTopIndex` and `scrollToTopOffset` let chrome follow the animation. The built-in [DefaultTabBar source](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/src/components/DefaultTabBar.tsx) is the reference implementation.
+
+### Position a bar with a retained header
+
+> **Unreleased:** this uses `minHeaderHeight`, which is merged into `main` and is not included in npm `1.5.1`.
+
+A header's collapse distance is `headerHeight - minHeaderHeight`. When using `useCollapsibleHeader().collapseProgress` in a custom bar, translate from the full header height to the effective minimum:
+
+```tsx
+const { headerHeight, minHeaderHeight, collapseProgress } = useCollapsibleHeader();
+const style = useAnimatedStyle(() => ({
+  transform: [{
+    translateY: headerHeight.value
+      - Math.max(0, headerHeight.value - minHeaderHeight) * collapseProgress.value,
+  }],
+}));
+```
+
+Apply this translation to a bar positioned below `pinnedHeaderHeight + topInset`. It covers normal collapse; keep the pull-down and scroll-to-top handling described above for those interactions. The default bar already handles them.
+
+Multiplying progress by the full header height would move the bar too far when a strip is retained. See [headers](/docs/guides/headers#keep-part-of-the-header-visible) for the layout and [header values](/docs/api/header-values) for the hook's measurements.
+
+Keep `tabBarHeight` on the container consistent with your rendered bar. See the [default bar reference](/docs/api/tab-bar).
+
+Returning `null` from `renderTabBar` hides the bar but still reserves its height. Set `tabBarHeight={0}` as well when removing that space.

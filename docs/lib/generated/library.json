@@ -1,0 +1,779 @@
+{
+  "version": "1.5.1",
+  "packageName": "react-native-collapsible-fluid-tabs",
+  "sourceHashes": {
+    "src/types.ts": "7456e77208ae465b3b6a171163e0abaaaba147159e04effcc9597053f13327ca",
+    "src/hooks.ts": "a673f414d1a67d4a55f0d9653368b81f5baae192fed5b6a356b3091049dc45f0",
+    "src/components/DefaultTabBar.tsx": "8c5959731afe16daafdf2736fc9ba9769054f70662b3221bd9f44ace5b28a737"
+  },
+  "peerDependencies": {
+    "@legendapp/list": ">=3.2.0",
+    "@shopify/flash-list": ">=2.0.0",
+    "react": ">=19.2.0",
+    "react-native": ">=0.83.0",
+    "react-native-gesture-handler": ">=3.0.0",
+    "react-native-reanimated": ">=4.4.0",
+    "react-native-safe-area-context": ">=5.0.0",
+    "react-native-worklets": ">=0.9.1"
+  },
+  "optionalPeers": [
+    "@legendapp/list",
+    "@shopify/flash-list"
+  ],
+  "interfaces": {
+    "TabConfig": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "name",
+          "optional": false,
+          "type": "string",
+          "description": "Unique tab identity. Changing the names or their order remounts the pager.",
+          "deprecated": null
+        },
+        {
+          "name": "icon",
+          "optional": true,
+          "type": "ReactNode",
+          "description": "Optional tab-bar icon. The default bar supplies its tint through `color` and `tintColor`.",
+          "deprecated": null
+        },
+        {
+          "name": "label",
+          "optional": true,
+          "type": "string",
+          "description": "Visible and accessible label. With no label, the default bar shows `name` only when no icon is supplied; its accessible label always falls back to `name`.",
+          "deprecated": null
+        },
+        {
+          "name": "badge",
+          "optional": true,
+          "type": "string | number | boolean",
+          "description": "Badge shown on this tab in the default tab bar. A string or number renders\nas a count bubble; `true` renders a small dot, and `false` hides it. Custom tab bars receive it\non their `TabConfig` and can render it however they like.",
+          "deprecated": null
+        }
+      ]
+    },
+    "TabBarRenderProps": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "tabs",
+          "optional": false,
+          "type": "TabConfig[]",
+          "description": "Tab metadata in page order.",
+          "deprecated": null
+        },
+        {
+          "name": "scrollY",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Active page's mirrored offset; negative values represent overscroll.",
+          "deprecated": null
+        },
+        {
+          "name": "perPageScrollY",
+          "optional": false,
+          "type": "SharedValue<number>[]",
+          "description": "Tracked offsets for each page. Custom chrome should also account for\n`scrollToTopOffset` during re-taps and negative `scrollY` during a stretched pull.",
+          "deprecated": null
+        },
+        {
+          "name": "scrollToTopIndex",
+          "optional": true,
+          "type": "SharedValue<number>",
+          "description": "Active during same-tab scroll-to-top so header chrome can follow the\nUI-thread driven target instead of waiting on native scroll events.",
+          "deprecated": null
+        },
+        {
+          "name": "scrollToTopOffset",
+          "optional": true,
+          "type": "SharedValue<number>",
+          "description": "Animated offset to read while `scrollToTopIndex` matches the active page.",
+          "deprecated": null
+        },
+        {
+          "name": "tabCount",
+          "optional": false,
+          "type": "number",
+          "description": "Number of pages.",
+          "deprecated": null
+        },
+        {
+          "name": "headerHeight",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Collapsible header height, initially estimated and then measured.",
+          "deprecated": null
+        },
+        {
+          "name": "activeIndex",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Selected target index; changes before a paging animation finishes.",
+          "deprecated": null
+        },
+        {
+          "name": "pagerOffset",
+          "optional": false,
+          "type": "DerivedValue<number>",
+          "description": "Fractional visual page position, clamped to the first and last pages.",
+          "deprecated": null
+        },
+        {
+          "name": "pillWidth",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Width of one equal-width tab slot, measured by the default tab bar.",
+          "deprecated": null
+        },
+        {
+          "name": "pinnedHeaderHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Pinned header height, excluding `topInset`.",
+          "deprecated": null
+        },
+        {
+          "name": "tabBarHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Reserved tab bar height. Custom tab bars should fit this height.",
+          "deprecated": null
+        },
+        {
+          "name": "topInset",
+          "optional": false,
+          "type": "number",
+          "description": "Reserved top inset.",
+          "deprecated": null
+        },
+        {
+          "name": "minHeaderHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Minimum visible height of the collapsible header once chrome collapse finishes.",
+          "deprecated": null
+        },
+        {
+          "name": "pullDownBehavior",
+          "optional": false,
+          "type": "PullDownBehavior",
+          "description": "Chrome behavior while the list is pulled below its start.",
+          "deprecated": null
+        },
+        {
+          "name": "onTabPress",
+          "optional": false,
+          "type": "(index: number) => void",
+          "description": "Select a page, or scroll the selected page to its top when enabled.",
+          "deprecated": null
+        }
+      ]
+    },
+    "SpringConfig": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "damping",
+          "optional": true,
+          "type": "number",
+          "description": "Spring damping. Defaults to 30.",
+          "deprecated": null
+        },
+        {
+          "name": "stiffness",
+          "optional": true,
+          "type": "number",
+          "description": "Spring stiffness. Defaults to 200.",
+          "deprecated": null
+        },
+        {
+          "name": "mass",
+          "optional": true,
+          "type": "number",
+          "description": "Spring mass. Defaults to 1.",
+          "deprecated": null
+        },
+        {
+          "name": "overshootClamping",
+          "optional": true,
+          "type": "boolean",
+          "description": "Stop the spring at its target without overshooting. Defaults to true.",
+          "deprecated": null
+        }
+      ]
+    },
+    "HeaderRenderProps": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "scrollY",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Active page's scroll position; negative values represent overscroll.",
+          "deprecated": null
+        },
+        {
+          "name": "headerHeight",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Collapsible header height, initially estimated and then measured.",
+          "deprecated": null
+        },
+        {
+          "name": "topInset",
+          "optional": false,
+          "type": "number",
+          "description": "Reserved top inset. Apply it as padding inside the pinned header if needed.",
+          "deprecated": null
+        },
+        {
+          "name": "pinnedHeaderHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Pinned header height, excluding `topInset`.",
+          "deprecated": null
+        }
+      ]
+    },
+    "ContainerProps": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "children",
+          "optional": false,
+          "type": "ReactNode",
+          "description": "One or more Tabs.Tab elements. Changing tab names, count, or order resets pager and page state.",
+          "deprecated": null
+        },
+        {
+          "name": "renderHeader",
+          "optional": true,
+          "type": "(props: HeaderRenderProps) => ReactNode",
+          "description": "Collapsible header rendered above the tab bar. Its height is measured automatically.",
+          "deprecated": null
+        },
+        {
+          "name": "renderPinnedHeader",
+          "optional": true,
+          "type": "(props: HeaderRenderProps) => ReactNode",
+          "description": "Fixed top header. Its content should include any desired padding for `topInset`.",
+          "deprecated": null
+        },
+        {
+          "name": "pinnedHeaderHeight",
+          "optional": true,
+          "type": "number",
+          "description": "Height of the pinned header, excluding the safe-area top inset (which is\nadded to the wrapper's height). Omit it to measure the rendered pinned\nheader, including its own top-inset padding, then subtract that inset.\nAn explicit height avoids the first-frame measurement adjustment.",
+          "deprecated": null
+        },
+        {
+          "name": "topInset",
+          "optional": true,
+          "type": "number",
+          "description": "Top inset reserved by the container. Defaults to the device safe-area\ninset. Set to 0 to let chrome and content reach the status-bar/notch area,\nor when an ancestor already handles that inset. Negative values clamp to 0;\nnon-finite values fall back to the device inset.",
+          "deprecated": null
+        },
+        {
+          "name": "minHeaderHeight",
+          "optional": true,
+          "type": "number",
+          "description": "Minimum height of the collapsible header left visible after scrolling.\nThe tab bar stops below this strip instead of under the top inset alone.\nDefaults to 0 (header may collapse fully). Clamped to the measured header height.",
+          "deprecated": null
+        },
+        {
+          "name": "tabBarHeight",
+          "optional": true,
+          "type": "number",
+          "description": "Reserved tab bar height in layout units. Defaults to 56.",
+          "deprecated": null
+        },
+        {
+          "name": "initialIndex",
+          "optional": true,
+          "type": "number",
+          "description": "Tab to start on. Defaults to 0; rounded and clamped to the available pages. Read once at mount.",
+          "deprecated": null
+        },
+        {
+          "name": "index",
+          "optional": true,
+          "type": "number",
+          "description": "Controlled active tab: a new external value navigates to that tab.\nGestures and taps still move the pager directly and report via\n`onIndexChange` — commit that value back to your state to keep the pair\nin sync. An echoed report acknowledges navigation without restarting it\nor undoing a newer swipe. Omit it (or pass `undefined`)\nfor uncontrolled behavior driven by `initialIndex`, gestures, and the\nimperative ref.",
+          "deprecated": null
+        },
+        {
+          "name": "onIndexChange",
+          "optional": true,
+          "type": "(index: number) => void",
+          "description": "Reports the selected navigation target without waiting for animation\ncompletion. Gesture notifications reach React asynchronously; obsolete\nqueued notifications may be coalesced during rapid navigation.",
+          "deprecated": null
+        },
+        {
+          "name": "scrollToTopOnTabPress",
+          "optional": true,
+          "type": "boolean",
+          "description": "Tapping the already-active tab scrolls its list back to the top (the X\nbehavior). Defaults to `true`; set `false` to make re-taps inert.",
+          "deprecated": null
+        },
+        {
+          "name": "renderTabBar",
+          "optional": true,
+          "type": "(props: TabBarRenderProps) => ReactNode",
+          "description": "Custom tab bar; omit for the default pill bar, or return null to hide it. Set tabBarHeight to 0 to remove its reserved space.",
+          "deprecated": null
+        },
+        {
+          "name": "containerStyle",
+          "optional": true,
+          "type": "StyleProp<ViewStyle>",
+          "description": "Style for the outer container. Give it a bounded width and height.",
+          "deprecated": null
+        },
+        {
+          "name": "swipeEnabled",
+          "optional": true,
+          "type": "boolean",
+          "description": "Enable horizontal paging gestures. Defaults to true; tab presses and ref navigation still work when false.",
+          "deprecated": null
+        },
+        {
+          "name": "headerScrollEnabled",
+          "optional": true,
+          "type": "boolean",
+          "description": "Allow vertical dragging on the collapsible header and tab bar. Defaults to true.",
+          "deprecated": null
+        },
+        {
+          "name": "swipeActivationDistance",
+          "optional": true,
+          "type": "number",
+          "description": "Minimum horizontal travel before the direction rule can select paging. Defaults to 15 dp.",
+          "deprecated": null
+        },
+        {
+          "name": "swipeFailDistance",
+          "optional": true,
+          "type": "number",
+          "description": "Minimum vertical travel before a clearly vertical drag yields to scrolling. Defaults to 10 dp.",
+          "deprecated": null
+        },
+        {
+          "name": "swipeDirectionRatio",
+          "optional": true,
+          "type": "number",
+          "description": "Required dominance of one axis over the other. Defaults to 1.4; values\nbelow 1 are clamped to 1. Ambiguous diagonals yield to scrolling after\ntwice the larger activation distance. Direction locks until release.",
+          "deprecated": null
+        },
+        {
+          "name": "momentumSwipeFailDistance",
+          "optional": true,
+          "type": "number",
+          "description": "",
+          "deprecated": "Ignored. Direction recognition now uses the same ratio and\ndistances during momentum as at rest. Use swipeDirectionRatio,\nswipeActivationDistance and swipeFailDistance to tune recognition."
+        },
+        {
+          "name": "swipeGestureTopInset",
+          "optional": true,
+          "type": "SwipeGestureTopInset",
+          "description": "Top area where the horizontal pager pan should not activate. `'auto'`\n(default) follows the currently visible pinned header, safe-area inset,\ncollapsible header, and tab bar. A number reserves a fixed area instead.\nPass `0` to allow pager swipes from the full page height.",
+          "deprecated": null
+        },
+        {
+          "name": "springConfig",
+          "optional": true,
+          "type": "SpringConfig",
+          "description": "Spring for gesture releases. Programmatic navigation uses a timing animation.",
+          "deprecated": null
+        },
+        {
+          "name": "minPageContentHeight",
+          "optional": true,
+          "type": "number",
+          "description": "Minimum content height per page, so short or empty pages can still\nscroll far enough to hold the fully-collapsed chrome. Defaults to the\nmeasured container height plus the measured header height. Longer content\ncan scroll further. Per-list `minContentHeight` overrides it for one page.",
+          "deprecated": null
+        },
+        {
+          "name": "estimatedHeaderHeight",
+          "optional": true,
+          "type": "number",
+          "description": "Optional first-frame estimate for the collapsible header height. The real\nmeasured height still wins after layout, but this keeps list spacers from\nstarting at 0 and jumping on the first scroll.",
+          "deprecated": null
+        },
+        {
+          "name": "lazy",
+          "optional": true,
+          "type": "boolean",
+          "description": "Lazily mount tab pages as they are visited. Mounted tabs stay mounted so\nscroll state is preserved when returning to a tab. Defaults to false.",
+          "deprecated": null
+        },
+        {
+          "name": "lazyPreloadDistance",
+          "optional": true,
+          "type": "number",
+          "description": "Number of neighboring tabs to mount before they are visited when `lazy` is\nenabled. Defaults to 1 so adjacent swipe targets are ready.",
+          "deprecated": null
+        },
+        {
+          "name": "pullDownBehavior",
+          "optional": true,
+          "type": "PullDownBehavior",
+          "description": "How the page behaves on pull-down at the top.\n\n- `'stretch'` — the whole page rides down with the pull: the collapsible\n  header and tab bar translate down while the pinned header stays put,\n  revealing the refresh indicator near the top of the screen. On iOS\n  this rides the native bounce with the native RefreshControl. Android\n  has no native bounce, so the Container drives the pull itself: the\n  native SwipeRefreshLayout is suppressed and a built-in indicator is\n  shown instead — your `refreshControl` element's `refreshing` and\n  `onRefresh` still drive it, no API change.\n- `'static'` (default) — chrome stays put; the native RefreshControl\n  appears between the header chrome and the list content on both\n  platforms (`progressViewOffset` is injected automatically; pass your\n  own to override). iOS stretch mode offsets its native indicator below\n  the pinned header and top inset. Android stretch uses a built-in\n  indicator and does not apply native indicator styling props.\n\nThe web wrappers do not implement native pull-to-refresh gestures.",
+          "deprecated": null
+        }
+      ]
+    },
+    "TabProps": {
+      "file": "src/types.ts",
+      "extends": [
+        "TabConfig"
+      ],
+      "properties": [
+        {
+          "name": "children",
+          "optional": false,
+          "type": "ReactNode",
+          "description": "Page content, normally one coordinated list wrapper.",
+          "deprecated": null
+        }
+      ]
+    },
+    "TabsRef": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "setIndex",
+          "optional": false,
+          "type": "(index: number, animated?: boolean) => void",
+          "description": "Move to a tab, animated by default. Indices round and clamp; non-finite values select 0. Reports through onIndexChange.",
+          "deprecated": null
+        },
+        {
+          "name": "getIndex",
+          "optional": false,
+          "type": "() => number",
+          "description": "Current selected target index, even while its animation is settling.",
+          "deprecated": null
+        }
+      ]
+    },
+    "TabComponent": {
+      "file": "src/types.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "$$typeofTab",
+          "optional": false,
+          "type": "typeof TabSymbol",
+          "description": "",
+          "deprecated": null
+        }
+      ]
+    },
+    "CollapsibleHeader": {
+      "file": "src/hooks.ts",
+      "extends": [],
+      "properties": [
+        {
+          "name": "scrollY",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Active page's scroll position (shared value).",
+          "deprecated": null
+        },
+        {
+          "name": "headerHeight",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "Collapsing-header height: the initial estimate until layout provides a measurement. Zero without a header.",
+          "deprecated": null
+        },
+        {
+          "name": "collapseProgress",
+          "optional": false,
+          "type": "DerivedValue<number>",
+          "description": "0 = fully expanded, 1 = fully collapsed (derived, clamped). Remains 0 when header height is 0.",
+          "deprecated": null
+        },
+        {
+          "name": "pinnedHeaderHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Pinned header height (excludes the safe-area top inset).",
+          "deprecated": null
+        },
+        {
+          "name": "tabBarHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Tab bar height.",
+          "deprecated": null
+        },
+        {
+          "name": "topInset",
+          "optional": false,
+          "type": "number",
+          "description": "Reserved top inset (the device safe area unless Container.topInset overrides it).",
+          "deprecated": null
+        },
+        {
+          "name": "minHeaderHeight",
+          "optional": false,
+          "type": "number",
+          "description": "Minimum visible collapsible header height after chrome collapse.",
+          "deprecated": null
+        },
+        {
+          "name": "contentTop",
+          "optional": false,
+          "type": "number",
+          "description": "Fixed chrome height when the collapsing header is fully collapsed\n(pinned header + top inset + min header + tab bar). Handy for positioning a\ncustom sticky element or a RefreshControl.",
+          "deprecated": null
+        }
+      ]
+    },
+    "DefaultTabBarColors": {
+      "file": "src/components/DefaultTabBar.tsx",
+      "extends": [],
+      "properties": [
+        {
+          "name": "background",
+          "optional": true,
+          "type": "string",
+          "description": "Background of the tab bar.",
+          "deprecated": null
+        },
+        {
+          "name": "trackBackground",
+          "optional": true,
+          "type": "string",
+          "description": "Track color behind the pill.",
+          "deprecated": null
+        },
+        {
+          "name": "pillBackground",
+          "optional": true,
+          "type": "string",
+          "description": "Color of the moving pill behind the active tab.",
+          "deprecated": null
+        },
+        {
+          "name": "iconTint",
+          "optional": true,
+          "type": "string",
+          "description": "Tint supplied to icon elements through both `color` and `tintColor`.",
+          "deprecated": null
+        },
+        {
+          "name": "labelColor",
+          "optional": true,
+          "type": "string",
+          "description": "Color used for label text.",
+          "deprecated": null
+        },
+        {
+          "name": "badgeBackground",
+          "optional": true,
+          "type": "string",
+          "description": "Background of the tab badge bubble/dot.",
+          "deprecated": null
+        },
+        {
+          "name": "badgeText",
+          "optional": true,
+          "type": "string",
+          "description": "Color of the badge count text.",
+          "deprecated": null
+        }
+      ]
+    },
+    "DefaultTabBarProps": {
+      "file": "src/components/DefaultTabBar.tsx",
+      "extends": [
+        "TabBarRenderProps"
+      ],
+      "properties": [
+        {
+          "name": "colors",
+          "optional": true,
+          "type": "DefaultTabBarColors",
+          "description": "Overrides for the default light tab-bar palette.",
+          "deprecated": null
+        },
+        {
+          "name": "sidePadding",
+          "optional": true,
+          "type": "number",
+          "description": "Side padding inside the pill container. Default 16.",
+          "deprecated": null
+        },
+        {
+          "name": "minTabWidth",
+          "optional": true,
+          "type": "number",
+          "description": "Minimum width an equal-width tab may shrink to before the bar switches to\nits horizontally scrollable, content-width layout. Default 88.\nOnly consulted when `scrollable` is `'auto'`.",
+          "deprecated": null
+        },
+        {
+          "name": "scrollable",
+          "optional": true,
+          "type": "'auto' | boolean",
+          "description": "Layout mode. `'auto'` (default) uses an equal-width pill when the tabs fit\nand a scrollable content-width pill when they'd be narrower than\n`minTabWidth`. `true` forces the scrollable layout; `false` forces\nequal-width (tabs may get cramped).",
+          "deprecated": null
+        }
+      ]
+    },
+    "BarProps": {
+      "file": "src/components/DefaultTabBar.tsx",
+      "extends": [],
+      "properties": [
+        {
+          "name": "tabs",
+          "optional": false,
+          "type": "TabConfig[]",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "pagerOffset",
+          "optional": false,
+          "type": "DerivedValue<number>",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "activeIndex",
+          "optional": false,
+          "type": "SharedValue<number>",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "selectedIndex",
+          "optional": false,
+          "type": "number",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "onTabPress",
+          "optional": false,
+          "type": "(index: number) => void",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "colors",
+          "optional": false,
+          "type": "Required<DefaultTabBarColors>",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "containerWidth",
+          "optional": false,
+          "type": "number",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "pullPanGesture",
+          "optional": true,
+          "type": "object",
+          "description": "",
+          "deprecated": null
+        }
+      ]
+    },
+    "TabButtonProps": {
+      "file": "src/components/DefaultTabBar.tsx",
+      "extends": [],
+      "properties": [
+        {
+          "name": "index",
+          "optional": false,
+          "type": "number",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "tab",
+          "optional": false,
+          "type": "TabConfig",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "pagerOffset",
+          "optional": false,
+          "type": "DerivedValue<number> | SharedValue<number>",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "iconTint",
+          "optional": false,
+          "type": "string",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "labelColor",
+          "optional": false,
+          "type": "string",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "badgeBackground",
+          "optional": false,
+          "type": "string",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "badgeText",
+          "optional": false,
+          "type": "string",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "selected",
+          "optional": false,
+          "type": "boolean",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "onTabPress",
+          "optional": false,
+          "type": "(index: number) => void",
+          "description": "",
+          "deprecated": null
+        },
+        {
+          "name": "onMeasure",
+          "optional": true,
+          "type": "(index: number, x: number, width: number) => void",
+          "description": "When provided, the button reports its layout and uses content width.",
+          "deprecated": null
+        },
+        {
+          "name": "pullPanGesture",
+          "optional": true,
+          "type": "object",
+          "description": "",
+          "deprecated": null
+        }
+      ]
+    }
+  }
+}

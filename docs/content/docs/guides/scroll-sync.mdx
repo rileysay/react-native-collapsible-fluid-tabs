@@ -1,0 +1,53 @@
+---
+title: Scroll synchronization
+description: Keep headers and pages in step as you move between tabs.
+---
+
+## Let the adapters coordinate
+
+Each tab's scrollable reports its position to the container. The pager and header use that shared state to keep transitions consistent.
+
+Always use `Tabs.FlatList`, `Tabs.ScrollView`, or one of the optional adapters inside a page. A raw React Native scrollable does not participate in this coordination.
+
+During navigation, the container aligns the other pages to the current header state:
+
+- While the header is partly visible, their offsets match the active page's offset.
+- Once the header is fully collapsed, pages already scrolled past the collapse threshold keep their deeper position. Pages closer to the top move to the threshold.
+
+This preserves header continuity rather than keeping every page at the same list row. Returning from an expanded header can therefore change a previously scrolled page's offset.
+
+## Preserve tab identity
+
+Keep the `name` and order of your tabs stable. Changing tab names, order, or count remounts the pager and resets its mounted pages and scroll positions.
+
+Changing labels, icons, badges, or content does not remount the pager.
+
+## Control navigation
+
+Use `initialIndex` for an uncontrolled initial page. Use `index` together with `onIndexChange` to coordinate selection with React state:
+
+```tsx
+const [index, setIndex] = useState(0);
+
+<Tabs.Container index={index} onIndexChange={setIndex}>
+  {/* Tabs.Tab pages */}
+</Tabs.Container>
+```
+
+Import `useState` from React. A changed external `index` navigates to that page. Gestures and taps also move the pager directly, so commit the reported index back into state to keep them synchronized. The callback reports the target without waiting for the animation to finish; it is not an animation-completion event. Gesture reports cross from the UI runtime to JavaScript, so a busy JavaScript thread can delay delivery until after the animation. Obsolete queued gesture reports may be coalesced during rapid navigation.
+
+The [imperative ref](/docs/api/ref) also supports `setIndex(index, animated?)` and `getIndex()`.
+
+## Gesture direction
+
+The current source uses activation distances and `swipeDirectionRatio` to distinguish horizontal paging from vertical scrolling. Ambiguous diagonals yield to scrolling. See the [container reference](/docs/api/container) for current definitions and deprecated options.
+
+## Same-tab presses
+
+By default, pressing the active tab scrolls its list back to the top. Disable this with `scrollToTopOnTabPress={false}`. A new vertical drag can interrupt that animation.
+
+## Short pages
+
+The container gives short or empty pages enough content height to preserve the collapsed header position. `minPageContentHeight` changes the shared minimum, and `minContentHeight` overrides it for one adapter.
+
+The default minimum is the measured container height plus the collapsing header height. Reducing it can leave a short page unable to scroll far enough to keep the header fully collapsed.

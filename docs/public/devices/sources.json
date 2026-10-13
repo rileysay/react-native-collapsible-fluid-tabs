@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "sha256": "cb7b20a551c4fd63e794e1dd08ab0096816a12e72d38503f36a242550f07264c",
+      "url": "https://raw.githubusercontent.com/blaineam/Monkr/ab1798c85cb88b71ce25dd8e73ce603f53c934c0/static/devices/iphone-18-pro/black.png",
+      "file": "iphone-18-pro-black.png"
+    },
+    {
+      "sha256": "58e2ab0318adbf6dc5bed2e234383ed2bb2fa257ce0c93cea20a86c595fb5f16",
+      "url": "https://raw.githubusercontent.com/blaineam/Monkr/ab1798c85cb88b71ce25dd8e73ce603f53c934c0/static/devices/iphone-18-pro/silver.png",
+      "file": "iphone-18-pro-silver.png"
+    },
+    {
+      "sha256": "56206abbe37b422096e66e480c867e72e31b8ac5b66636491bb371cda3ea69db",
+      "url": "https://raw.githubusercontent.com/blaineam/Monkr/ab1798c85cb88b71ce25dd8e73ce603f53c934c0/static/devices/iphone-18-pro/display.svg",
+      "file": "iphone-18-pro-screen.svg"
+    }
+  ],
+  "appleDownload": "https://devimages-cdn.apple.com/design/resources/download/Bezel-iPhone-18.dmg",
+  "repository": "https://github.com/blaineam/Monkr",
+  "sourcePage": "https://developer.apple.com/design/resources/",
+  "license": "Apple Design Resources License (bezel PNGs); Monkr MIT (screen mask)",
+  "geometry": {
+    "image": [
+      1350,
+      2760
+    ],
+    "logicalScreen": [
+      402,
+      874
+    ],
+    "cutout": {
+      "width": 1206,
+      "height": 2622,
+      "y": 69,
+      "x": 72
+    }
+  },
+  "commit": "ab1798c85cb88b71ce25dd8e73ce603f53c934c0"
+}

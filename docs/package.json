@@ -1,0 +1,49 @@
+{
+  "name": "fluid-tabs-docs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start",
+    "types:check": "next typegen && tsc --noEmit",
+    "lint": "eslint",
+    "docs:sync": "node scripts/sync-library.mjs",
+    "docs:check": "node scripts/sync-library.mjs --check",
+    "docs:examples": "node scripts/check-examples.mjs",
+    "test:toc": "node --experimental-strip-types --test scripts/toc-tracking.test.mjs",
+    "check": "npm run test:toc && npm run types:check && npm run lint && npm run build"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.8.0",
+    "@vercel/analytics": "^2.0.1",
+    "clsx": "2.1.1",
+    "cn": "^0.2.6",
+    "fumadocs-core": "16.15.10",
+    "fumadocs-mdx": "15.4.0",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.15.10",
+    "lucide-react": "^1.43.0",
+    "motion": "13.2.0",
+    "next": "16.3.5",
+    "next-themes": "0.4.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "reicon-react": "1.2.5",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.3.5",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

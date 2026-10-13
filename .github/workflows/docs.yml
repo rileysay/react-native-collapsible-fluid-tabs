@@ -1,0 +1,62 @@
+name: Documentation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'src/types.ts'
+      - 'src/hooks.ts'
+      - 'src/components/DefaultTabBar.tsx'
+      - 'package.json'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'src/types.ts'
+      - 'src/hooks.ts'
+      - 'src/components/DefaultTabBar.tsx'
+      - 'package.json'
+      - '.github/workflows/docs.yml'
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Check documentation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install site dependencies
+        run: npm ci
+
+      - name: Check generated API reference
+        run: npm run docs:check
+
+      - name: Lint site
+        run: npm run lint
+
+      - name: Check section tracking
+        run: npm run test:toc
+
+      - name: Build and typecheck site
+        run: npm run build

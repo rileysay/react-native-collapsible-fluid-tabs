@@ -1,0 +1,56 @@
+---
+title: Hooks
+description: Read the header and tab state inside your components.
+---
+
+## useCollapsibleHeader
+
+Call the hook inside a component rendered beneath `Tabs.Container`:
+
+```tsx
+import { useCollapsibleHeader } from 'react-native-collapsible-fluid-tabs/core';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+
+export function HeaderOverlay() {
+  const { collapseProgress, contentTop } = useCollapsibleHeader();
+  const style = useAnimatedStyle(() => ({
+    opacity: 1 - collapseProgress.value,
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        { position: 'absolute', top: contentTop, left: 0, right: 0 },
+        style,
+      ]}
+    >
+      {/* Overlay content */}
+    </Animated.View>
+  );
+}
+```
+
+Render the overlay as a sibling of a list inside a tab. The hook supplies values; it does not automatically position sticky content or insert list spacing.
+
+`collapseProgress` runs from `0` (expanded) to `1` (collapsed) over the header's collapse distance. It stays at `0` when that distance is zero, including when there is no header or the whole header is retained.
+
+`contentTop` is the fixed height when fully collapsed: pinned header + top inset + effective `minHeaderHeight` + tab bar. It does not follow the header's current visible height during scrolling. `minHeaderHeight` is a number clamped to the measured header height. See [header values](/docs/api/header-values) for every return value.
+
+> **Unreleased:** `minHeaderHeight` and the retained-header calculation are merged into `main`. In npm `1.5.1`, the header collapses fully and `contentTop` is pinned header + top inset + tab bar.
+
+This hook throws when called outside `Tabs.Container`. Use a child component such as `HeaderOverlay`; calling the hook in the same component that returns the container does not place that hook inside its provider.
+
+## useTabsContext
+
+The lower-level context exposes the container's coordination state. Prefer `useCollapsibleHeader` when you only need header values, so your code depends on a smaller surface.
+
+It includes shared values such as `activeIndex`, `pagerOffset`, and the per-page offsets, plus internal list and gesture registration state. `activeIndex` is the selected navigation target, while `pagerOffset` follows the fractional visual position during a swipe or animation. Read shared values in Reanimated worklets for animation; shared-value updates do not cause React renders. Avoid reading `.value` during render, as explained in the [Reanimated shared-value reference](https://docs.swmansion.com/react-native-reanimated/docs/core/useSharedValue/). This hook throws outside `Tabs.Container`.
+
+## useTabIndex
+
+Read the containing tab's index from within that tab. It identifies the page rendering your component; it is not a subscription to the pager's active index.
+
+Outside a tab page provider, this hook returns `0`. That fallback does not mean the pager's first tab is active. Place the component inside a `Tabs.Tab` when you need its actual page index.
+
+Import all three hooks from `react-native-collapsible-fluid-tabs/core` and follow the normal React hook rules.

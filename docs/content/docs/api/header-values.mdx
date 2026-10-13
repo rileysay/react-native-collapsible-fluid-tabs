@@ -1,0 +1,92 @@
+---
+title: "Header values"
+description: "The values returned by useCollapsibleHeader."
+---
+
+Type: `CollapsibleHeader`. [View library source](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/src/hooks.ts).
+
+## scrollY
+
+Required
+
+```ts
+SharedValue<number>
+```
+
+Active page's scroll position (shared value).
+
+## headerHeight
+
+Required
+
+```ts
+SharedValue<number>
+```
+
+Collapsing-header height: the initial estimate until layout provides a measurement. Zero without a header.
+
+## collapseProgress
+
+Required
+
+```ts
+DerivedValue<number>
+```
+
+0 = fully expanded, 1 = fully collapsed (derived, clamped). Remains 0 when header height is 0.
+
+## pinnedHeaderHeight
+
+Required
+
+```ts
+number
+```
+
+Pinned header height (excludes the safe-area top inset).
+
+## tabBarHeight
+
+Required
+
+```ts
+number
+```
+
+Tab bar height.
+
+## topInset
+
+Required
+
+```ts
+number
+```
+
+Reserved top inset (the device safe area unless Container.topInset overrides it).
+
+## minHeaderHeight
+
+Required
+
+```ts
+number
+```
+
+Minimum visible collapsible header height after chrome collapse.
+
+> **Unreleased:** this value is merged into `main` and is not included in npm `1.5.1`.
+
+See [retaining part of the header](/docs/guides/headers#keep-part-of-the-header-visible) for the layout and custom tab-bar behavior.
+
+## contentTop
+
+Required
+
+```ts
+number
+```
+
+Fixed chrome height when the collapsing header is fully collapsed
+(pinned header + top inset + min header + tab bar). Handy for positioning a
+custom sticky element or a RefreshControl.

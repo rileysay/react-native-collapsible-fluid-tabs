@@ -1,0 +1,64 @@
+---
+title: List adapters
+description: Use the scrollable that fits your content.
+---
+
+| Adapter | Useful for | Extra package |
+| --- | --- | --- |
+| `Tabs.FlatList` | Virtualized feeds using React Native's built-in list | None |
+| `Tabs.ScrollView` | Short content, forms, and about pages | None |
+| `LegendList` | Feeds and grids using LegendList's Reanimated integration | `@legendapp/list` |
+| `FlashList` | Feeds and grids using FlashList v2 | `@shopify/flash-list` |
+
+Choose based on your content and measurements on target devices. This library does not establish a universal performance ranking between list implementations.
+
+## Core adapters
+
+```tsx
+import { Tabs } from 'react-native-collapsible-fluid-tabs/core';
+```
+
+This entry includes `FlatList`, `ScrollView`, `Container`, `Tab`, `DefaultTabBar`, the hooks, and their types.
+
+## Optional adapters
+
+```tsx
+import { Tabs } from 'react-native-collapsible-fluid-tabs/core';
+import { LegendList } from 'react-native-collapsible-fluid-tabs/legend-list';
+
+<Tabs.Tab name="posts" label="Posts">
+  <LegendList
+    data={posts}
+    keyExtractor={(item) => item.id}
+    renderItem={({ item }) => <Post item={item} />}
+  />
+</Tabs.Tab>
+```
+
+The FlashList adapter uses the same composition:
+
+```tsx
+import { FlashList } from 'react-native-collapsible-fluid-tabs/flash-list';
+```
+
+The main package entry also exposes `Tabs.LegendList` and `Tabs.FlashList` for convenience. Use the separate entry points when you want to avoid unused optional adapters and their declarations.
+
+## Forwarded and reserved props
+
+Common list props such as `data`, `renderItem`, `numColumns`, `keyExtractor`, and header/footer components are forwarded.
+
+The wrappers manage `onScroll`, `scrollEventThrottle`, and the internal scroll ref. FlashList also reserves `renderScrollComponent`. LegendList reserves `refScrollView` and `sharedValues.scrollOffset`; use `useCollapsibleHeader()` to observe the coordinated active offset. Other LegendList `sharedValues` outputs are forwarded.
+
+Public `ref` props still expose the underlying list's imperative API. Layout, content-size, drag-start, and momentum callbacks remain available. Programmatic header drags and web mouse scrolling do not synthesize native drag/momentum lifecycle callbacks.
+
+These adapters target **vertical, non-inverted** content.
+
+On web, a contained LegendList needs a bounded height to scroll its own content. `Tabs.LegendList` fills its page (`flex: 1`, `height: '100%'`) and keeps scroll events flowing to its virtualizer. Preserve those bounds when overriding `style`; `useWindowScroll` is not supported by this contained, Reanimated-backed adapter. See [Legend List's web layout notes](https://legendapp.com/open-source/list/v3/guides/).
+
+## Content coordinates
+
+The adapters inject header/footer spacers. Account for those when using `getItemLayout`, `initialScrollIndex`, sticky list headers, or imperative scroll offsets.
+
+`Tabs.ScrollView` adjusts `stickyHeaderIndices` for its extra first child automatically. A consumer `contentContainerStyle` can override the injected `minHeight`.
+
+See [pull to refresh](/docs/guides/pull-to-refresh) for refresh props and platform behavior.

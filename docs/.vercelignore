@@ -1,0 +1,10 @@
+/node_modules
+.next
+.source
+.git
+.deploy
+artifacts
+*.tsbuildinfo
+.env*.local
+!public/demo/assets/node_modules
+!public/demo/assets/node_modules/**

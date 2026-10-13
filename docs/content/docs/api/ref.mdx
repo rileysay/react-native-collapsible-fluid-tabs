@@ -1,0 +1,28 @@
+---
+title: "Imperative ref"
+description: "Navigate to a tab from a parent component."
+---
+
+Type: `TabsRef`. [View library source](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/src/types.ts).
+
+Create the ref with `useRef<TabsRef>(null)` and pass it to `Tabs.Container`. The component must be mounted before calling its methods.
+
+## setIndex
+
+Required
+
+```ts
+(index: number, animated?: boolean) => void
+```
+
+Move to a tab, animated by default. Indices round and clamp; non-finite values select 0. Reports through onIndexChange.
+
+## getIndex
+
+Required
+
+```ts
+() => number
+```
+
+Current selected target index, even while its animation is settling.

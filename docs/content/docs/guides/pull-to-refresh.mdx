@@ -1,0 +1,70 @@
+---
+title: Pull to refresh
+description: Connect your refresh state and choose how the screen responds.
+---
+
+## List shorthand
+
+FlatList, LegendList, and FlashList support `onRefresh` and `refreshing`:
+
+```tsx
+<Tabs.FlatList
+  data={posts}
+  renderItem={renderPost}
+  refreshing={refreshing}
+  onRefresh={refreshPosts}
+/>
+```
+
+Keep `refreshing` controlled: set it to `true` synchronously in `onRefresh`, before awaiting your request, and `false` in a `finally` block when the request finishes. Leaving it `false` dismisses the indicator. Use separate state when tabs refresh independently. See React Native's [controlled refresh behavior](https://reactnative.dev/docs/refreshcontrol).
+
+## Explicit controls
+
+All four adapters accept `refreshControl`. An explicit control takes precedence over shorthand. ScrollView uses the explicit control.
+
+On Android, import `RefreshControl` from **react-native-gesture-handler** so its gesture can coordinate with the pager:
+
+```tsx
+import { RefreshControl } from 'react-native-gesture-handler';
+
+<Tabs.ScrollView
+  refreshControl={
+    <RefreshControl refreshing={refreshing} onRefresh={refreshPosts} />
+  }
+>
+  {/* Your content */}
+</Tabs.ScrollView>
+```
+
+## Choose a pull behavior
+
+Set `pullDownBehavior` on the container:
+
+| Value | Behavior |
+| --- | --- |
+| `static` | The default. Chrome stays in place; native refresh appears between the header and list content. |
+| `stretch` | The page and collapsing header ride down together while the pinned header stays in place. |
+
+iOS uses a native refresh control in both modes. Android stretch mode uses a built-in indicator. Its behavior reads `refreshing`, `onRefresh`, and `enabled`; native indicator styling props do not customize that built-in indicator.
+
+## Pulling from the header
+
+With the default `headerScrollEnabled={true}`, header and tab-bar drags move the active list programmatically. On iOS they stop at the list's boundaries, so they do not produce native bounce or native pull-to-refresh. A gesture that starts on the list uses its native scrolling and refresh behavior.
+
+To start a native iOS pull from decorative header areas, use `headerScrollEnabled={false}`, `pointerEvents="box-none"` on layout wrappers, and `pointerEvents="none"` on decorative children. Follow the [header pass-through example](/docs/guides/headers#native-scrolling-through-the-header). Keep the refresh control configured on the list and leave its bouncing enabled.
+
+Buttons stay tappable, but drags starting on header buttons or the tab bar do not pass through to the list. Putting `none` on a button would disable its taps too. This setup does not require the experimental native-scroll beta or a Gesture Handler patch.
+
+Android stretch mode uses the library's custom pull, which can start on the header or tab bar. For Android static mode, start native refresh on the list.
+
+## Offsets and platform details
+
+Native indicators receive a default `progressViewOffset` of pinned header + top inset + collapsing header + tab bar in static mode. iOS stretch mode uses only pinned header + top inset. An explicit offset, including `0`, overrides it.
+
+Android stretch mode reveals a programmatic refresh only when the active list is at the top. Paging dismisses its indicator while the request continues. Pulling again during that request shows the indicator without issuing another refresh; changing tab or pull mode cancels an unfinished pull.
+
+On Android, the list defaults to `overScrollMode="never"` so platform stretch does not move list pixels independently of the header.
+
+The stock Gesture Handler refresh control has no refresh UI on web and is omitted there. The website examples add a browser-only simulation of Static and Stretch using the demo refresh state. This simulation is not included in the published package. Read [web support](/docs/guides/web).
+
+iOS uses a default system tint; an explicit `tintColor` takes precedence. The example also includes an experimental native tint/haptic patch that still needs physical-device verification. Installing this library does not apply that native patch to your app. See [the native refresh notes](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/docs/IOS_REFRESH_CONTROL.md).

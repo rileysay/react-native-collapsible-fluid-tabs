@@ -1,0 +1,49 @@
+---
+title: Introduction
+description: Collapsing headers, swipeable tabs, and scrolling that feels connected.
+---
+
+**Fluid Tabs** brings your header, tab bar, and scrollable pages into one coordinated experience. Use it to build profiles, feeds, galleries, and any screen where content should keep moving naturally.
+
+The package is called `react-native-collapsible-fluid-tabs`. It works on iOS, Android, and React Native Web.
+
+<div className="doc-cards">
+  <a className="doc-card" href="/docs/installation"><strong>Get set up →</strong><span>Install the library and connect its native dependencies.</span></a>
+  <a className="doc-card" href="/docs/quick-start"><strong>Build your first screen →</strong><span>Start with a complete, minimal two-tab example.</span></a>
+  <a className="doc-card" href="/examples"><strong>Try the example →</strong><span>Scroll and switch tabs in an interactive web preview.</span></a>
+  <a className="doc-card" href="/docs/api/container"><strong>Explore the API →</strong><span>Every public prop, taken from the library types.</span></a>
+</div>
+
+## How the pieces fit
+
+A `Tabs.Container` coordinates the header, pager, and scroll positions. Each `Tabs.Tab` identifies a page. Inside that page, render one of the library's scrollable adapters.
+
+```tsx
+<Tabs.Container renderHeader={() => <ProfileHeader />}>
+  <Tabs.Tab name="posts" label="Posts">
+    <Tabs.FlatList data={posts} renderItem={renderPost} />
+  </Tabs.Tab>
+  <Tabs.Tab name="about" label="About">
+    <Tabs.ScrollView>
+      <About />
+    </Tabs.ScrollView>
+  </Tabs.Tab>
+</Tabs.Container>
+```
+
+This illustrates the composition. The [quick start](/docs/quick-start) defines all the components and data.
+
+## What comes with it
+
+- **Collapsing and pinned headers** that make room for content.
+- **A gesture-driven pager** with horizontal swipes and programmatic navigation.
+- **Synchronized scroll state** across pages.
+- **An adaptive pill tab bar** that can switch to a scrollable layout.
+- **FlatList, ScrollView, LegendList, and FlashList adapters.**
+- **Animation values and hooks** for your own tab bar and header effects.
+
+## Make it your own
+
+Start with the defaults. When your screen needs more, [customize the headers](/docs/guides/headers), [style the tab bar](/docs/guides/tab-bars), or [choose a different list](/docs/guides/list-adapters).
+
+Fluid Tabs is open source under the [MIT license](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/LICENSE). Contributions and issue reports are welcome on [GitHub](https://github.com/rileysay/react-native-collapsible-fluid-tabs).

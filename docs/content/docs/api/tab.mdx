@@ -1,0 +1,58 @@
+---
+title: "Tabs.Tab"
+description: "Give a page its identity, label, icon, and content."
+---
+
+Type: `TabProps`. [View library source](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/src/types.ts).
+
+## name
+
+Required
+
+```ts
+string
+```
+
+Unique tab identity. Changing the names or their order remounts the pager.
+
+## icon
+
+Optional
+
+```ts
+ReactNode
+```
+
+Optional tab-bar icon. The default bar supplies its tint through `color` and `tintColor`.
+
+## label
+
+Optional
+
+```ts
+string
+```
+
+Visible and accessible label. With no label, the default bar shows `name` only when no icon is supplied; its accessible label always falls back to `name`.
+
+## badge
+
+Optional
+
+```ts
+string | number | boolean
+```
+
+Badge shown on this tab in the default tab bar. A string or number renders
+as a count bubble; `true` renders a small dot, and `false` hides it. Custom tab bars receive it
+on their `TabConfig` and can render it however they like.
+
+## children
+
+Required
+
+```ts
+ReactNode
+```
+
+Page content, normally one coordinated list wrapper.

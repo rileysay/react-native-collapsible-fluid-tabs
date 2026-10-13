@@ -1,0 +1,21 @@
+/* Scaling the phone can round adjacent composited surfaces differently.
+   Overlap the visible chrome, not its zero-height positioning wrappers.
+   The Lab's rounded pill track is not a chrome edge and needs no overlap. */
+#root [data-testid='profile-tab-bar']::before,
+#root div:has(> div > [aria-label='Back to examples'])::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: inherit;
+  pointer-events: none;
+}
+
+#root [data-testid='profile-tab-bar']::before {
+  top: -2px;
+}
+
+#root div:has(> div > [aria-label='Back to examples'])::after {
+  bottom: -2px;
+}

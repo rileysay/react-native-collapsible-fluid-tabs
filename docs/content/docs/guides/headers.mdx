@@ -1,0 +1,122 @@
+---
+title: Headers
+description: Configure collapsing headers, pinned content, and header gestures.
+---
+
+## The collapsing header
+
+Pass your content through `renderHeader`. The container measures it and uses that height to coordinate collapsing and list spacing.
+
+```tsx
+<Tabs.Container
+  renderHeader={() => <ProfileHeader />}
+  estimatedHeaderHeight={240}
+  containerStyle={{ backgroundColor: '#fff' }}
+>
+  {/* Your Tabs.Tab pages */}
+</Tabs.Container>
+```
+
+`estimatedHeaderHeight` is an optional first-frame hint. The measured height wins after layout. Use a realistic estimate when you want to reduce initial spacer movement.
+
+## Keep part of the header visible
+
+> **Unreleased:** `minHeaderHeight` is merged into `main` and is not included in npm version `1.5.1`.
+
+Set `minHeaderHeight` to keep the bottom strip of the same collapsing header visible above the tab bar:
+
+```tsx
+<Tabs.Container
+  renderHeader={() => <ProfileHeader />}
+  estimatedHeaderHeight={240}
+  minHeaderHeight={60}
+>
+  {/* Your Tabs.Tab pages */}
+</Tabs.Container>
+```
+
+With a measured 240-point header and a 60-point minimum, the header travels up by 180 points. Its bottom 60 points remain visible and the list continues scrolling beneath the tab bar. Put the content you want to retain at the bottom of `renderHeader`.
+
+The default is `0`, which allows the header to collapse fully. The effective minimum is limited to the measured header height; negative or non-finite values resolve to `0`. A minimum larger than the header retains the whole header. This works with both `static` and `stretch` pull behavior, and does not add space to the expanded layout.
+
+The collapsed tab bar starts at `pinnedHeaderHeight + topInset + minHeaderHeight`, using the effective minimum. The hook and tab-bar render props expose that same clamped value. See [custom tab bars](/docs/guides/tab-bars#position-a-bar-with-a-retained-header) if you position your own bar.
+
+## Keep a bar pinned
+
+Use `renderPinnedHeader` for a separate bar that stays fixed from the first frame. It reserves space above the collapsing header throughout the scroll:
+
+```tsx
+renderPinnedHeader={({ topInset }) => (
+  <View style={{ paddingTop: topInset, backgroundColor: '#fff' }}>
+    <View style={{ height: 48, justifyContent: 'center', paddingHorizontal: 16 }}>
+      <Text>Profile</Text>
+    </View>
+  </View>
+)}
+```
+
+The example above uses React Native's `View` and `Text`. Apply the supplied `topInset` as padding inside your pinned header. The container reserves the space but does not pad that content for you.
+
+`pinnedHeaderHeight` excludes the safe-area inset. Omit it to measure automatically; provide a known value, such as `48`, to avoid that initial measurement.
+
+The container reserves the device's top safe-area inset by default, even without a pinned header. Set `topInset={0}` when an ancestor already provides that space, or to let the collapsing header move behind the status bar. When drawing behind the notch, place any initial safe-area padding inside `renderHeader` so it scrolls away with that header. Keep essential controls clear of the cutout at the collapsed position. This setting does not change the bottom safe-area padding in the list adapters.
+
+## Animate the header content
+
+Both header render callbacks receive `scrollY`, `headerHeight`, `topInset`, and `pinnedHeaderHeight`. Use those values inside your own component's Reanimated hooks. Do not call hooks directly inside a render callback.
+
+For overlays inside a tab, [useCollapsibleHeader](/docs/api/hooks) exposes `collapseProgress` and `contentTop`. `contentTop` is the combined height of the pinned header, top inset, retained header strip, and tab bar when fully collapsed. It excludes the part of the header that scrolls away.
+
+## Header gestures
+
+`headerScrollEnabled` defaults to `true` and allows vertical dragging on the header and tab bar. `swipeGestureTopInset` controls where a horizontal pager gesture can begin. The automatic inset follows the currently visible chrome; `0` allows paging from the full page height.
+
+Header dragging drives the active list programmatically and respects its `scrollEnabled` setting. These movements stop at the list's top and bottom; they do not produce the native iOS rubber-band bounce or native pull-to-refresh. Android's custom stretch pull can still start from the header or tab bar.
+
+The pinned header remains fixed and is excluded from the programmatic header drag. With reduced motion enabled, releasing a header drag does not start a momentum glide.
+
+## Native scrolling through the header
+
+On iOS, let touches on decorative header areas reach the list underneath when you want its native scrolling, bounce, and configured refresh control. Use this setup together:
+
+- Set `headerScrollEnabled={false}` so the programmatic header gesture does not claim those touches.
+- Set `pointerEvents="box-none"` on header layout wrappers.
+- Set `pointerEvents="none"` on decorative content, while leaving buttons touchable.
+
+```tsx
+import { Pressable, Text, View } from 'react-native';
+import { Tabs } from 'react-native-collapsible-fluid-tabs/core';
+
+export function PassThroughProfile({ onEdit }: { onEdit: () => void }) {
+  return (
+    <Tabs.Container
+      headerScrollEnabled={false}
+      renderHeader={() => (
+        <View pointerEvents="box-none" style={{ padding: 24 }}>
+          <View pointerEvents="none">
+            <Text>Rowan Miles</Text>
+            <Text>Photos and notes</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={onEdit}>
+            <Text>Edit profile</Text>
+          </Pressable>
+        </View>
+      )}
+    >
+      <Tabs.Tab name="posts">
+        <Tabs.ScrollView>
+          <Text>Your posts</Text>
+        </Tabs.ScrollView>
+      </Tabs.Tab>
+    </Tabs.Container>
+  );
+}
+```
+
+`box-none` keeps the wrapper out of touch targeting, but its children can still receive touches. Decorative children need `none` too if they would otherwise cover the list. Do not put `none` on a button or a parent containing buttons: that disables their taps.
+
+In this setup, buttons and tabs remain tappable, but a drag starting on one of those controls does not pass through to the sibling list. Turning off header dragging also removes its programmatic scrolling from those areas. The pass-through setup works with the published `1.5.1` package and does not require a native module or Gesture Handler patch.
+
+The list still needs bouncing enabled for iOS overscroll and a configured refresh control to refresh. See [pull to refresh](/docs/guides/pull-to-refresh#pulling-from-the-header) and the [React Native pointer-events reference](https://reactnative.dev/docs/view#pointerevents).
+
+See [Tabs.Container](/docs/api/container) for the current prop definitions.

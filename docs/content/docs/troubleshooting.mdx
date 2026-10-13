@@ -1,0 +1,50 @@
+---
+title: Troubleshooting
+description: Diagnose gesture, layout, navigation, and refresh issues.
+---
+
+## Gestures do not respond
+
+Verify that the screen is inside `GestureHandlerRootView`. Android modal content needs its own gesture root. Check installed Gesture Handler, Reanimated, and Worklets versions against their compatibility tables, and rebuild the native client after dependency changes.
+
+## The screen is blank or has no height
+
+Give the containing screen a bounded height, usually with `flex: 1`. Render a Fluid Tabs scrollable adapter inside each `Tabs.Tab`.
+
+## Optional package resolution fails
+
+Use the `/core` entry if you do not need both optional list adapters. Import LegendList or FlashList from its separate entry point only when its peer dependency is installed.
+
+Custom Metro configurations should preserve `transformer.allowOptionalDependencies: true`. Standard Expo and React Native configurations support optional imports.
+
+The `/core` entry also avoids optional-adapter declarations, which is useful when TypeScript reports a missing optional package even though your screen does not render that adapter.
+
+## Header spacing jumps on first mount
+
+Use a realistic `estimatedHeaderHeight`. The container still uses the actual measured height after layout. For a known pinned bar height, set `pinnedHeaderHeight` without the safe-area inset.
+
+## The background flashes during overscroll
+
+Set `containerStyle.backgroundColor` to your screen's background.
+
+## Tab switching loses page state
+
+Changing tab names, order, or count remounts the pager. Keep tab identity stable. Updating a tab label, icon, badge, or content does not itself remount the pager; replacing a child component's type or key can still reset that child's state.
+
+Scroll position also follows the [header synchronization rules](/docs/guides/scroll-sync). An offset change during navigation does not necessarily mean the page remounted.
+
+## Refresh needs a second pull on Android
+
+Use Gesture Handler's `RefreshControl`, or the list adapter's `onRefresh` / `refreshing` shorthand. Keep `refreshing` true while your request is running. See [pull to refresh](/docs/guides/pull-to-refresh).
+
+## The active index snaps back
+
+When using controlled `index`, commit `onIndexChange` back into state. If you only need an initial tab, use `initialIndex` instead.
+
+## Web pull-to-refresh does not start
+
+The built-in refresh control has no web pull-to-refresh gesture. Use the Lab's Refresh action to exercise its loading state, or supply a custom web refresh control. Test the native indicators on iOS and Android. See [web support](/docs/guides/web).
+
+## Need a hand?
+
+[Open a GitHub issue](https://github.com/rileysay/react-native-collapsible-fluid-tabs/issues) with your dependency versions, platform, and a small reproducible screen.

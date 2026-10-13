@@ -1,0 +1,73 @@
+---
+title: Quick start
+description: A complete two-tab screen, ready to make your own.
+---
+
+Complete [installation](/docs/installation) first, including the gesture root and safe-area provider.
+
+## Build a screen
+
+This example uses only the core entry point. It needs no optional list packages.
+
+```tsx title="ProfileScreen.tsx"
+import { Text, View } from 'react-native';
+import { Tabs } from 'react-native-collapsible-fluid-tabs/core';
+
+const posts = Array.from({ length: 30 }, (_, index) => ({
+  id: String(index),
+  title: 'A little moment, no. ' + (index + 1),
+}));
+
+function ProfileHeader() {
+  return (
+    <View style={{ padding: 24, backgroundColor: '#f3e9dc' }}>
+      <Text style={{ fontSize: 30, fontWeight: '600' }}>Hello, fluid.</Text>
+      <Text style={{ marginTop: 8 }}>Scroll down. There is more to see.</Text>
+    </View>
+  );
+}
+
+export function ProfileScreen() {
+  return (
+    <Tabs.Container
+      renderHeader={() => <ProfileHeader />}
+      containerStyle={{ flex: 1, backgroundColor: '#fff' }}
+    >
+      <Tabs.Tab name="posts" label="Posts">
+        <Tabs.FlatList
+          data={posts}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={{ padding: 24, borderBottomWidth: 1, borderColor: '#eee' }}>
+              <Text>{item.title}</Text>
+            </View>
+          )}
+        />
+      </Tabs.Tab>
+      <Tabs.Tab name="about" label="About">
+        <Tabs.ScrollView contentContainerStyle={{ padding: 24 }}>
+          <Text style={{ fontSize: 22, fontWeight: '600' }}>A little about us.</Text>
+          <Text style={{ marginTop: 12 }}>Your story goes here.</Text>
+        </Tabs.ScrollView>
+      </Tabs.Tab>
+    </Tabs.Container>
+  );
+}
+```
+
+Render `ProfileScreen` inside the providers shown in [installation](/docs/installation). The containing screen must have a bounded height, usually through `flex: 1`.
+
+## Try the interactions
+
+Scroll the posts to collapse the header. Tap **About**, then return to **Posts**. Tap **Posts** again to scroll that list back to the top. On a touch device, swipe horizontally between pages.
+
+## Keep the composition predictable
+
+Give every tab a unique, stable `name`. Use one scrollable adapter per page, so the container can coordinate its scroll state. Keep tab identity and order stable while preserving scroll positions.
+
+## Where to go next
+
+- [Headers](/docs/guides/headers): add a pinned toolbar or an animated profile.
+- [List adapters](/docs/guides/list-adapters): bring LegendList or FlashList.
+- [Custom tab bars](/docs/guides/tab-bars): change colors or design a new bar.
+- [Container reference](/docs/api/container): explore the complete prop surface.

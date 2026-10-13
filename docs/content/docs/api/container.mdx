@@ -1,0 +1,372 @@
+---
+title: "Tabs.Container"
+description: "Connect a collapsing header, tab bar, and scrollable pages."
+---
+
+Type: `ContainerProps`. [View library source](https://github.com/rileysay/react-native-collapsible-fluid-tabs/blob/main/src/types.ts).
+
+## children
+
+Required
+
+```ts
+ReactNode
+```
+
+One or more Tabs.Tab elements. Changing tab names, count, or order resets pager and page state.
+
+## renderHeader
+
+Optional
+
+```ts
+(props: HeaderRenderProps) => ReactNode
+```
+
+Collapsible header rendered above the tab bar. Its height is measured automatically.
+
+## renderPinnedHeader
+
+Optional
+
+```ts
+(props: HeaderRenderProps) => ReactNode
+```
+
+Fixed top header. Its content should include any desired padding for `topInset`.
+
+## pinnedHeaderHeight
+
+Optional
+
+```ts
+number
+```
+
+Height of the pinned header, excluding the safe-area top inset (which is
+added to the wrapper's height). Omit it to measure the rendered pinned
+header, including its own top-inset padding, then subtract that inset.
+An explicit height avoids the first-frame measurement adjustment.
+
+## topInset
+
+Optional
+
+```ts
+number
+```
+
+Top inset reserved by the container. Defaults to the device safe-area
+inset. Set to 0 to let chrome and content reach the status-bar/notch area,
+or when an ancestor already handles that inset. Negative values clamp to 0;
+non-finite values fall back to the device inset.
+
+## minHeaderHeight
+
+Optional
+
+```ts
+number
+```
+
+Minimum height of the collapsible header left visible after scrolling.
+The tab bar stops below this strip instead of under the top inset alone.
+Defaults to 0 (header may collapse fully). Clamped to the measured header height.
+
+> **Unreleased:** this value is merged into `main` and is not included in npm `1.5.1`.
+
+See [retaining part of the header](/docs/guides/headers#keep-part-of-the-header-visible) for the layout and custom tab-bar behavior.
+
+## tabBarHeight
+
+Optional
+
+```ts
+number
+```
+
+Reserved tab bar height in layout units. Defaults to 56.
+
+## initialIndex
+
+Optional
+
+```ts
+number
+```
+
+Tab to start on. Defaults to 0; rounded and clamped to the available pages. Read once at mount.
+
+## index
+
+Optional
+
+```ts
+number
+```
+
+Controlled active tab: a new external value navigates to that tab.
+Gestures and taps still move the pager directly and report via
+`onIndexChange` — commit that value back to your state to keep the pair
+in sync. An echoed report acknowledges navigation without restarting it
+or undoing a newer swipe. Omit it (or pass `undefined`)
+for uncontrolled behavior driven by `initialIndex`, gestures, and the
+imperative ref.
+
+## onIndexChange
+
+Optional
+
+```ts
+(index: number) => void
+```
+
+Reports the selected navigation target without waiting for animation
+completion. Gesture notifications reach React asynchronously; obsolete
+queued notifications may be coalesced during rapid navigation.
+
+## scrollToTopOnTabPress
+
+Optional
+
+```ts
+boolean
+```
+
+Tapping the already-active tab scrolls its list back to the top (the X
+behavior). Defaults to `true`; set `false` to make re-taps inert.
+
+## renderTabBar
+
+Optional
+
+```ts
+(props: TabBarRenderProps) => ReactNode
+```
+
+Custom tab bar; omit for the default pill bar, or return null to hide it. Set tabBarHeight to 0 to remove its reserved space.
+
+## containerStyle
+
+Optional
+
+```ts
+StyleProp<ViewStyle>
+```
+
+Style for the outer container. Give it a bounded width and height.
+
+## swipeEnabled
+
+Optional
+
+```ts
+boolean
+```
+
+Enable horizontal paging gestures. Defaults to true; tab presses and ref navigation still work when false.
+
+## headerScrollEnabled
+
+Optional
+
+```ts
+boolean
+```
+
+Allow vertical dragging on the collapsible header and tab bar. Defaults to true.
+
+## swipeActivationDistance
+
+Optional
+
+```ts
+number
+```
+
+Minimum horizontal travel before the direction rule can select paging. Defaults to 15 dp.
+
+## swipeFailDistance
+
+Optional
+
+```ts
+number
+```
+
+Minimum vertical travel before a clearly vertical drag yields to scrolling. Defaults to 10 dp.
+
+## swipeDirectionRatio
+
+Optional
+
+```ts
+number
+```
+
+Required dominance of one axis over the other. Defaults to 1.4; values
+below 1 are clamped to 1. Ambiguous diagonals yield to scrolling after
+twice the larger activation distance. Direction locks until release.
+
+## momentumSwipeFailDistance
+
+Optional · **Deprecated**
+
+```ts
+number
+```
+
+See the [usage guides](/docs/quick-start) for how this value fits into a screen.
+
+> Ignored. Direction recognition now uses the same ratio and
+distances during momentum as at rest. Use swipeDirectionRatio,
+swipeActivationDistance and swipeFailDistance to tune recognition.
+
+## swipeGestureTopInset
+
+Optional
+
+```ts
+SwipeGestureTopInset
+```
+
+Top area where the horizontal pager pan should not activate. `'auto'`
+(default) follows the currently visible pinned header, safe-area inset,
+collapsible header, and tab bar. A number reserves a fixed area instead.
+Pass `0` to allow pager swipes from the full page height.
+
+## springConfig
+
+Optional
+
+```ts
+SpringConfig
+```
+
+Spring for gesture releases. Programmatic navigation uses a timing animation.
+
+### damping
+
+`number`
+
+Spring damping. Defaults to 30.
+
+### stiffness
+
+`number`
+
+Spring stiffness. Defaults to 200.
+
+### mass
+
+`number`
+
+Spring mass. Defaults to 1.
+
+### overshootClamping
+
+`boolean`
+
+Stop the spring at its target without overshooting. Defaults to true.
+
+## minPageContentHeight
+
+Optional
+
+```ts
+number
+```
+
+Minimum content height per page, so short or empty pages can still
+scroll far enough to hold the fully-collapsed chrome. Defaults to the
+measured container height plus the measured header height. Longer content
+can scroll further. Per-list `minContentHeight` overrides it for one page.
+
+## estimatedHeaderHeight
+
+Optional
+
+```ts
+number
+```
+
+Optional first-frame estimate for the collapsible header height. The real
+measured height still wins after layout, but this keeps list spacers from
+starting at 0 and jumping on the first scroll.
+
+## lazy
+
+Optional
+
+```ts
+boolean
+```
+
+Lazily mount tab pages as they are visited. Mounted tabs stay mounted so
+scroll state is preserved when returning to a tab. Defaults to false.
+
+## lazyPreloadDistance
+
+Optional
+
+```ts
+number
+```
+
+Number of neighboring tabs to mount before they are visited when `lazy` is
+enabled. Defaults to 1 so adjacent swipe targets are ready.
+
+## pullDownBehavior
+
+Optional
+
+```ts
+PullDownBehavior
+```
+
+How the page behaves on pull-down at the top.
+
+- `'stretch'` — the whole page rides down with the pull: the collapsible
+  header and tab bar translate down while the pinned header stays put,
+  revealing the refresh indicator near the top of the screen. On iOS
+  this rides the native bounce with the native RefreshControl. Android
+  has no native bounce, so the Container drives the pull itself: the
+  native SwipeRefreshLayout is suppressed and a built-in indicator is
+  shown instead — your `refreshControl` element's `refreshing` and
+  `onRefresh` still drive it, no API change.
+- `'static'` (default) — chrome stays put; the native RefreshControl
+  appears between the header chrome and the list content on both
+  platforms (`progressViewOffset` is injected automatically; pass your
+  own to override). iOS stretch mode offsets its native indicator below
+  the pinned header and top inset. Android stretch uses a built-in
+  indicator and does not apply native indicator styling props.
+
+The web wrappers do not implement native pull-to-refresh gestures.
+
+## Header render values
+
+Both `renderHeader` and `renderPinnedHeader` receive `HeaderRenderProps`. Read shared values in animated styles or reactions to respond to scrolling.
+
+### HeaderRenderProps.scrollY
+
+`SharedValue<number>`
+
+Active page's scroll position; negative values represent overscroll.
+
+### HeaderRenderProps.headerHeight
+
+`SharedValue<number>`
+
+Collapsible header height, initially estimated and then measured.
+
+### HeaderRenderProps.topInset
+
+`number`
+
+Reserved top inset. Apply it as padding inside the pinned header if needed.
+
+### HeaderRenderProps.pinnedHeaderHeight
+
+`number`
+
+Pinned header height, excluding `topInset`.
