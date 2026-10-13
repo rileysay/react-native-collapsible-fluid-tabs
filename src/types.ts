@@ -52,6 +52,8 @@ export interface TabBarRenderProps {
   tabBarHeight: number;
   /** Reserved top inset. */
   topInset: number;
+  /** Minimum visible height of the collapsible header once chrome collapse finishes. */
+  minHeaderHeight: number;
   /** Chrome behavior while the list is pulled below its start. */
   pullDownBehavior: PullDownBehavior;
   /** Select a page, or scroll the selected page to its top when enabled. */
@@ -109,6 +111,12 @@ export interface ContainerProps {
    * non-finite values fall back to the device inset.
    */
   topInset?: number;
+  /**
+   * Minimum height of the collapsible header left visible after scrolling.
+   * The tab bar stops below this strip instead of under the top inset alone.
+   * Defaults to 0 (header may collapse fully). Clamped to the measured header height.
+   */
+  minHeaderHeight?: number;
   /** Reserved tab bar height in layout units. Defaults to 56. */
   tabBarHeight?: number;
   /** Tab to start on. Defaults to 0; rounded and clamped to the available pages. Read once at mount. */
@@ -236,6 +244,7 @@ export interface InternalTabsContextValue {
   headerHeightValue: number;
   tabBarHeight: number;
   topInset: number;
+  minHeaderHeight: number;
   bottomInset: number;
   minPageContentHeight: number;
   listRefs: AnimatedRef<any>[];

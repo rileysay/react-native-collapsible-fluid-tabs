@@ -151,11 +151,12 @@ The only required prop is `children` (your tabs). Everything else is optional �
 | `renderPinnedHeader` | `(props: HeaderRenderProps) => ReactNode` | — | Optional header pinned to the top, always visible. Same render props. |
 | `pinnedHeaderHeight` | `number` | auto | Pinned header height excluding safe-area inset (added automatically). Omit to auto-measure from layout. |
 | `topInset` | `number` | device safe-area top | Override the top inset reserved by the container. Set `0` for content and chrome to reach behind the status bar/notch, or if an ancestor already handles the inset. Negative values clamp to zero; non-finite values use the device inset. |
+| `minHeaderHeight` | `number` | `0` | Minimum height of the collapsing header left visible after scrolling. The tab bar then rests at `topInset + minHeaderHeight` instead of on the top inset alone. Clamped to the measured header height. `0` collapses the header fully. |
 | `estimatedHeaderHeight` | `number` | `0` | Optional first-frame estimate for the collapsing header so list spacers don't jump on mount. Measured height always wins. |
 
 For a custom pinned header, apply the supplied `topInset` as padding inside your header content (as the example does). The container reserves the total height; it does not pad the rendered content for you.
 
-Omitting `renderPinnedHeader` removes the fixed header, but still reserves the top safe-area inset. Combine it with `topInset={0}` to scroll behind the notch. If the expanded header needs safe padding initially, put that padding inside `renderHeader` so it scrolls away with the header. The collapsed tab bar also reaches the top, so avoid placing essential controls beneath the cutout. Omitting `renderHeader` instead removes the collapsing header and its spacer.
+Omitting `renderPinnedHeader` removes the fixed header, but still reserves the top safe-area inset. Combine it with `topInset={0}` to scroll behind the notch. If the expanded header needs safe padding initially, put that padding inside `renderHeader` so it scrolls away with the header. With `minHeaderHeight` at `0`, the collapsed tab bar also reaches the top, so avoid placing essential controls beneath the cutout. Set `minHeaderHeight` when a strip of that same header (a title, for example) should stay visible above the collapsed tab bar. The header can still travel up into the notch while it is collapsing; only the resting position changes. This is not a pinned header: `renderPinnedHeader` reserves space from the first frame and pushes the expanded header down. Omitting `renderHeader` instead removes the collapsing header and its spacer.
 
 **Tabs & navigation**
 
@@ -268,6 +269,8 @@ It's **adaptive**: equal-width pills when tabs fit, and a horizontally scrollabl
 
 For collapse motion in a worklet, start with `perPageScrollY[activeIndex.value]?.value`. During a same-tab scroll-to-top, use `scrollToTopOffset.value` when `scrollToTopIndex.value` matches the active index. Android's custom stretch pull is represented by a negative `scrollY.value`, while the native list remains at zero. See `Tabs.DefaultTabBar` for the full offset selection and positioning logic.
 
+Keep a custom bar glued under the collapsing header. `collapseProgress` reaches 1 when the collapsible range is finished, so travel only `(headerHeight - minHeaderHeight) * collapseProgress`, not the full `headerHeight`. The bar's `translateY` then rests at `minHeaderHeight`. Multiplying progress by the full header height makes the bar outrun the header whenever `minHeaderHeight` is greater than 0.
+
 ### Hooks
 
 **`useCollapsibleHeader()`** — build a custom sticky element inside a tab (a filter bar, segmented control, …). Call it inside a `<Tabs.Container>`:
@@ -289,9 +292,9 @@ function FilterBar() {
 }
 ```
 
-Returns `{ scrollY, headerHeight, collapseProgress (0→1), pinnedHeaderHeight, tabBarHeight, topInset, contentTop }`.
+Returns `{ scrollY, headerHeight, collapseProgress (0→1), pinnedHeaderHeight, tabBarHeight, topInset, minHeaderHeight, contentTop }`.
 
-Render an overlay like this as a sibling of the list inside a tab. `contentTop` is the fixed chrome height when the header is collapsed; it excludes the collapsing header. The hook provides values, not automatic sticky positioning or list spacing.
+Render an overlay like this as a sibling of the list inside a tab. `contentTop` is the fixed chrome height when the header has finished collapsing: pinned header + top inset + `minHeaderHeight` + tab bar. It excludes the part of the header that scrolled away. `collapseProgress` reaches 1 at that shorter range, not at the full header height. The hook provides values, not automatic sticky positioning or list spacing.
 
 `useTabsContext()` and `useTabIndex()` are also exported for lower-level use.
 
